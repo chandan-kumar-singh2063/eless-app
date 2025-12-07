@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "130788929500",
+    "project_id": "eless-715ac",
+    "storage_bucket": "eless-715ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:130788929500:android:76ab2e26c24050a3de6919",
+        "android_client_info": {
+          "package_name": "com.example.eless"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_kNAOl6SK_LnrOVqgkPuhfbPHzALU4Ew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:130788929500:android:d7b896e4d728ea06de6919",
+        "android_client_info": {
+          "package_name": "com.example.test2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_kNAOl6SK_LnrOVqgkPuhfbPHzALU4Ew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

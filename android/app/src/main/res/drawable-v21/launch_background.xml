@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash screen for Android 5.0+ (API 21-30) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <!-- White background -->
+    <item android:drawable="@android:color/white" />
+
+    <!-- Centered eless logo (640x640px) -->
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/eless" />
+    </item>
+    
+</layer-list>
