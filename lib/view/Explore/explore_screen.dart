@@ -79,10 +79,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             eventController.filteredEventsList.length) {
                           return Obx(
                             () => eventController.isLoadingMore.value
-                                ? const Padding(
-                                    padding: EdgeInsets.all(16.0),
+                                ? Padding(
+                                    padding: const EdgeInsets.all(16.0),
                                     child: Center(
-                                      child: CircularProgressIndicator(),
+                                      child: CircularProgressIndicator(
+                                        color: AppTheme.lightPrimaryColor,
+                                      ),
                                     ),
                                   )
                                 : const SizedBox.shrink(),

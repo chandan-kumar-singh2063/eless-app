@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:eless/model/event.dart';
 import 'package:eless/controller/controllers.dart';
+import 'package:eless/theme/app_theme.dart';
 import 'ongoing_event_card.dart';
 
 class OngoingEvent extends StatefulWidget {
@@ -60,7 +61,10 @@ class _OngoingEventState extends State<OngoingEvent> {
                   ? Container(
                       width: 60,
                       alignment: Alignment.center,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.lightPrimaryColor,
+                      ),
                     )
                   : const SizedBox.shrink(),
             );

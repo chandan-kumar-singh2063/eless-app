@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:eless/view/home/components/upcoming_event/upcoming_event_card.dart';
 import 'package:eless/controller/controllers.dart';
+import 'package:eless/theme/app_theme.dart';
 import '../../../../model/event.dart';
 
 class UpcomingEvent extends StatefulWidget {
@@ -60,7 +61,10 @@ class _UpcomingEventState extends State<UpcomingEvent> {
                   ? Container(
                       width: 60,
                       alignment: Alignment.center,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.lightPrimaryColor,
+                      ),
                     )
                   : const SizedBox.shrink(),
             );

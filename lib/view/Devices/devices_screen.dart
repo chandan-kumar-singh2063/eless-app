@@ -84,10 +84,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
                             DevicesController.instance.deviceList.length) {
                           return Obx(
                             () => DevicesController.instance.isLoadingMore.value
-                                ? const Center(
+                                ? Center(
                                     child: Padding(
-                                      padding: EdgeInsets.all(16.0),
-                                      child: CircularProgressIndicator(),
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: CircularProgressIndicator(
+                                        color: AppTheme.lightPrimaryColor,
+                                      ),
                                     ),
                                   )
                                 : const SizedBox.shrink(),

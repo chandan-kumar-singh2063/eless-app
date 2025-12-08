@@ -143,10 +143,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                     .instance
                                     .isLoadingMore
                                     .value
-                                ? const Padding(
-                                    padding: EdgeInsets.all(16.0),
+                                ? Padding(
+                                    padding: const EdgeInsets.all(16.0),
                                     child: Center(
-                                      child: CircularProgressIndicator(),
+                                      child: CircularProgressIndicator(
+                                        color: AppTheme.lightPrimaryColor,
+                                      ),
                                     ),
                                   )
                                 : const SizedBox.shrink(),

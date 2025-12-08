@@ -50,8 +50,9 @@ class HomeScreen extends StatelessWidget {
                         child: SectionTitle(title: "Ongoing Events"),
                       ),
                       Obx(() {
-                        // Show shimmer during refresh OR initial load
-                        if (eventController.isAllEventsLoading.value) {
+                        // Show shimmer only on initial load (when list is empty)
+                        if (eventController.isAllEventsLoading.value &&
+                            eventController.ongoingEventList.isEmpty) {
                           return const OngoingEventLoading();
                         } else if (eventController
                             .ongoingEventList
@@ -70,8 +71,9 @@ class HomeScreen extends StatelessWidget {
                         child: SectionTitle(title: "Upcoming Events"),
                       ),
                       Obx(() {
-                        // Show shimmer during refresh OR initial load
-                        if (eventController.isAllEventsLoading.value) {
+                        // Show shimmer only on initial load (when list is empty)
+                        if (eventController.isAllEventsLoading.value &&
+                            eventController.upcomingEventList.isEmpty) {
                           return const UpcomingEventLoading();
                         } else if (eventController
                             .upcomingEventList
@@ -90,8 +92,9 @@ class HomeScreen extends StatelessWidget {
                         child: SectionTitle(title: "Past Events"),
                       ),
                       Obx(() {
-                        // Show shimmer during refresh OR initial load
-                        if (eventController.isAllEventsLoading.value) {
+                        // Show shimmer only on initial load (when list is empty)
+                        if (eventController.isAllEventsLoading.value &&
+                            eventController.pastEventList.isEmpty) {
                           return const PastEventLoading();
                         } else if (eventController.pastEventList.isNotEmpty) {
                           return PastEvent(

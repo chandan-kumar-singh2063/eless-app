@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:eless/view/home/components/past_event/past_event_card.dart';
 import 'package:eless/controller/controllers.dart';
+import 'package:eless/theme/app_theme.dart';
 import '../../../../model/event.dart';
 
 class PastEvent extends StatefulWidget {
@@ -59,7 +60,10 @@ class _PastEventState extends State<PastEvent> {
                   ? Container(
                       width: 60,
                       alignment: Alignment.center,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.lightPrimaryColor,
+                      ),
                     )
                   : const SizedBox.shrink(),
             );
