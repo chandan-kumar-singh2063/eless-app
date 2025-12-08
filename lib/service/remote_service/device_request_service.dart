@@ -5,7 +5,7 @@ import '../../model/device_request.dart';
 
 class DeviceRequestService {
   final _httpClient = HttpClientService.instance;
-  var remoteUrl = '$baseUrl/api/v1/services/devices';
+  var remoteUrl = '$baseUrl/services/api/devices';
 
   Future<DeviceAvailability> checkAvailability({
     required String deviceId,
