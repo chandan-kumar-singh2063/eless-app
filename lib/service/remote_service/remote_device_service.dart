@@ -5,7 +5,7 @@ import '../../model/device.dart';
 
 class RemoteDeviceService {
   final _httpClient = HttpClientService.instance;
-  var remoteUrl = '$baseUrl/services/api/devices';
+  var remoteUrl = '$baseUrl/api/v1/services/devices';
 
   // Paginated version
   Future<Map<String, dynamic>> getPaginated({

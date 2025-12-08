@@ -5,7 +5,7 @@ import '../../model/device_request.dart';
 
 class DeviceRequestService {
   final _httpClient = HttpClientService.instance;
-  var remoteUrl = '$baseUrl/services/api/devices';
+  var remoteUrl = '$baseUrl/api/v1/services/devices';
 
   Future<DeviceAvailability> checkAvailability({
     required String deviceId,
@@ -46,7 +46,6 @@ class DeviceRequestService {
       final endpoint = '$remoteUrl/$deviceId/request/';
       final payload = request.toJson();
 
-
       var response = await _httpClient.post(
         Uri.parse(endpoint),
         headers: {'Content-Type': 'application/json'},
@@ -55,7 +54,6 @@ class DeviceRequestService {
       );
 
       var jsonData = jsonDecode(response.body);
-
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {
