@@ -7,7 +7,7 @@
   [![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
   [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-  **A comprehensive mobile application for managing electronics lab equipment, events, and device requests with real-time notifications**
+  **A comprehensive mobile application for managing inventory, events, and device requests with real-time notifications**
 </div>
 
 ---
@@ -22,7 +22,7 @@
 
 ## 📱 About ELESS
 
-ELESS (Electrical Engineering Student's Society) is a modern, feature-rich mobile application designed to streamline the management of electronics laboratory equipment. The app provides students and administrators with an intuitive platform to browse devices, request equipment, track events, and receive real-time notifications.
+ELESS app is a modern, feature-rich mobile application designed to streamline the inventory and events of Electrical Engineering Student's Society . The app provides students and administrators with an intuitive platform to browse devices, request products, track events and receive real-time notifications.
 
 Built with Flutter and powered by a Django backend, ELESS offers a seamless offline-first experience with intelligent caching, responsive design for all screen sizes, and comprehensive state management.
 
@@ -322,19 +322,6 @@ static const String baseUrl = 'https://your-backend-api.com/api/';
 3. Download configuration files
 4. Enable Cloud Messaging
 5. Configure FCM in Django backend
-
-### Image Size Requirements
-For optimal display across all devices:
-
-| Image Type | Size | Aspect Ratio |
-|-----------|------|--------------|
-| Carousel Banner | 1200×675px | 16:9 |
-| Device Image | 400×600px | 2:3 |
-| Event Card | 640×360px | 16:9 |
-| Notification | 1024×512px | 2:1 |
-| Category | 400×400px | 1:1 |
-
----
 
 ## 🎯 App Flow
 
