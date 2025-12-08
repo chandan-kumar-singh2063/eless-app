@@ -1,4 +1,4 @@
-# ELESS - Electronics Lab Equipment & Services System
+# ELESS - Electrical Engineering Student's Society
 
 <div align="center">
   
@@ -22,7 +22,7 @@
 
 ## 📱 About ELESS
 
-ELESS (Electronics Lab Equipment & Services System) is a modern, feature-rich mobile application designed to streamline the management of electronics laboratory equipment. The app provides students and administrators with an intuitive platform to browse devices, request equipment, track events, and receive real-time notifications.
+ELESS (Electrical Engineering Student's Society) is a modern, feature-rich mobile application designed to streamline the management of electronics laboratory equipment. The app provides students and administrators with an intuitive platform to browse devices, request equipment, track events, and receive real-time notifications.
 
 Built with Flutter and powered by a Django backend, ELESS offers a seamless offline-first experience with intelligent caching, responsive design for all screen sizes, and comprehensive state management.
 
@@ -352,65 +352,6 @@ For optimal display across all devices:
 3. **Update** → Compare with cache → Update UI if changed
 4. **Offline** → Use cached data → Queue requests
 5. **Online** → Sync queued requests → Update cache
-
----
-
-## 🔐 Security Features
-
-- ✅ JWT token-based authentication
-- ✅ Automatic token refresh
-- ✅ Secure storage of sensitive data
-- ✅ Device fingerprinting
-- ✅ API request encryption (HTTPS)
-- ✅ Session management
-- ✅ Input validation & sanitization
-- ✅ Protected routes
-- ✅ Logout on token expiry
-
----
-
-## 🎨 Design Principles
-
-### UI/UX
-- **Material Design 3**: Modern, clean interface
-- **Responsive Design**: Works on all screen sizes (320px - 480px+)
-- **Dark Mode Ready**: Theme switching capability
-- **Accessibility**: Screen reader support, proper contrast ratios
-- **Smooth Animations**: 60 FPS transitions
-- **Loading States**: Shimmer effects, progress indicators
-- **Error Handling**: User-friendly error messages
-
-### Code Quality
-- **Clean Architecture**: Separation of concerns
-- **SOLID Principles**: Maintainable, scalable code
-- **DRY**: Reusable components and services
-- **Code Documentation**: Inline comments and documentation
-- **No Debug Logs**: Production-ready (all print statements removed)
-- **Linting**: Following Flutter best practices
-
----
-
-## 🐛 Known Issues & Limitations
-
-- iOS build not tested (Android-focused development)
-- Push notifications require data-only FCM messages
-- Image caching limited by device storage
-- QR scanner requires camera permission
-
----
-
-## 🔮 Future Enhancements
-
-- [ ] Dark mode support
-- [ ] Multi-language support (i18n)
-- [ ] Biometric authentication
-- [ ] In-app chat for device requests
-- [ ] Advanced analytics dashboard
-- [ ] Barcode scanning for devices
-- [ ] Export request history as PDF
-- [ ] Push notification scheduling
-- [ ] Offline request submission
-- [ ] Real-time device tracking
 
 ---
 
