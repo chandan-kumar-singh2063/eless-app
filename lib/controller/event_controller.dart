@@ -25,6 +25,25 @@ class EventController extends GetxController {
   RxBool isPastEventLoading = false.obs;
   RxBool isAllEventsLoading = false.obs;
 
+  // Pagination states for explore/all events
+  RxBool isLoadingMore = false.obs;
+  RxBool hasMoreData = true.obs;
+  int currentPage = 1;
+  final int pageSize = 10; // Load 10 events at a time
+
+  // Pagination for individual sections (home screen)
+  RxBool isLoadingMoreOngoing = false.obs;
+  RxBool hasMoreOngoing = true.obs;
+  int ongoingPage = 1;
+
+  RxBool isLoadingMoreUpcoming = false.obs;
+  RxBool hasMoreUpcoming = true.obs;
+  int upcomingPage = 1;
+
+  RxBool isLoadingMorePast = false.obs;
+  RxBool hasMorePast = true.obs;
+  int pastPage = 1;
+
   final LocalEventService _localEventService = LocalEventService();
   final LocalBadgeService _badgeService = LocalBadgeService();
   final RemoteAllEventsService _remoteAllEventsService =
@@ -42,47 +61,97 @@ class EventController extends GetxController {
     _loadCachedEvents(); // Load from cache first for instant UI
 
     // Fetch fresh data in background (don't block initialization)
-    getAllEvents().catchError((e) {
+    // Load only first page initially
+    getAllEventsFirstPage().catchError((e) {
       // User still sees cached data, no error shown
     });
   }
 
-  // Method to fetch fresh data from API (called on pull-to-refresh)
-  Future<void> getAllEvents() async {
+  // Initial load - gets first page only
+  Future<void> getAllEventsFirstPage() async {
     try {
       isAllEventsLoading(true);
+      currentPage = 1;
+      hasMoreData.value = true;
 
       // Load from cache first (instant UI)
       _loadCachedEvents();
 
-      // Try to get all events from a single API call
-      var result = await _remoteAllEventsService.getAllEvents();
-
-      if (result['success'] == true) {
-        // Update individual lists
-        ongoingEventList.assignAll(result['ongoing']);
-        upcomingEventList.assignAll(result['upcoming']);
-        pastEventList.assignAll(result['past']);
-
-        // Save to local storage
-        _localEventService.assignAllOngoingEvents(events: result['ongoing']);
-        _localEventService.assignAllUpcomingEvents(events: result['upcoming']);
-        _localEventService.assignAllPastEvents(events: result['past']);
-
-        // Combine all events
-        _combineAllEvents();
-      } else {
-        // Fallback to individual API calls if the combined API fails
-        await Future.wait([
-          _fetchOngoingEvents(),
-          _fetchUpcomingEvents(),
-          _fetchPastEvents(),
-        ]);
-        _combineAllEvents();
-      }
+      // Fetch first page from API
+      await _fetchAllEventsPage(page: 1, isRefresh: true);
     } finally {
       isAllEventsLoading(false);
     }
+  }
+
+  // Load more events (pagination)
+  Future<void> loadMoreAllEvents() async {
+    if (isLoadingMore.value || !hasMoreData.value) return;
+
+    try {
+      isLoadingMore(true);
+      currentPage++;
+      await _fetchAllEventsPage(page: currentPage, isRefresh: false);
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  Future<void> _fetchAllEventsPage({
+    required int page,
+    required bool isRefresh,
+  }) async {
+    try {
+      var result = await _remoteAllEventsService.getAllEventsPaginated(
+        page: page,
+        pageSize: pageSize,
+      );
+
+      if (result['success'] == true) {
+        final ongoing = result['ongoing'] as List<Event>;
+        final upcoming = result['upcoming'] as List<Event>;
+        final past = result['past'] as List<Event>;
+
+        // Check if we got less data than page size (last page)
+        final totalReceived = ongoing.length + upcoming.length + past.length;
+        if (totalReceived < pageSize) {
+          hasMoreData.value = false;
+        }
+
+        if (isRefresh) {
+          // Replace all data (refresh)
+          ongoingEventList.assignAll(ongoing);
+          upcomingEventList.assignAll(upcoming);
+          pastEventList.assignAll(past);
+        } else {
+          // Append data (pagination)
+          ongoingEventList.addAll(ongoing);
+          upcomingEventList.addAll(upcoming);
+          pastEventList.addAll(past);
+        }
+
+        // Save to local storage
+        if (isRefresh) {
+          _localEventService.assignAllOngoingEvents(events: ongoingEventList);
+          _localEventService.assignAllUpcomingEvents(events: upcomingEventList);
+          _localEventService.assignAllPastEvents(events: pastEventList);
+        }
+
+        // Combine all events
+        _combineAllEvents();
+      }
+    } catch (e) {
+      // Error handling
+      if (page == 1) {
+        // First page error - show cached data
+        _loadCachedEvents();
+      }
+    }
+  }
+
+  // Method to fetch fresh data from API (called on pull-to-refresh)
+  Future<void> getAllEvents() async {
+    return getAllEventsFirstPage();
   }
 
   void _loadCachedEvents() {
@@ -111,54 +180,109 @@ class EventController extends GetxController {
     filteredEventsList.assignAll(combined);
   }
 
-  Future<void> _fetchOngoingEvents() async {
+  // Pagination for home screen - ongoing events
+  Future<void> loadMoreOngoingEvents() async {
+    if (isLoadingMoreOngoing.value || !hasMoreOngoing.value) return;
+
     try {
-      var result = await RemoteOngoingEventService().get();
+      isLoadingMoreOngoing(true);
+      ongoingPage++;
+
+      var result = await RemoteOngoingEventService().getPaginated(
+        page: ongoingPage,
+        pageSize: pageSize,
+      );
+
       if (result != null && result.statusCode == 200) {
-        ongoingEventList.assignAll(ongoingEventListFromJson(result.body));
-        _localEventService.assignAllOngoingEvents(
-          events: ongoingEventListFromJson(result.body),
-        );
+        final newEvents = ongoingEventListFromJson(result.body);
+        if (newEvents.length < pageSize) {
+          hasMoreOngoing.value = false;
+        }
+        ongoingEventList.addAll(newEvents);
+      } else {
+        hasMoreOngoing.value = false;
       }
     } catch (e) {
+      hasMoreOngoing.value = false;
+    } finally {
+      isLoadingMoreOngoing(false);
     }
   }
 
-  Future<void> _fetchUpcomingEvents() async {
+  // Pagination for home screen - upcoming events
+  Future<void> loadMoreUpcomingEvents() async {
+    if (isLoadingMoreUpcoming.value || !hasMoreUpcoming.value) return;
+
     try {
-      var result = await RemoteUpcomingEventService().get();
+      isLoadingMoreUpcoming(true);
+      upcomingPage++;
+
+      var result = await RemoteUpcomingEventService().getPaginated(
+        page: upcomingPage,
+        pageSize: pageSize,
+      );
+
       if (result != null && result.statusCode == 200) {
-        upcomingEventList.assignAll(upcomingEventListFromJson(result.body));
-        _localEventService.assignAllUpcomingEvents(
-          events: upcomingEventListFromJson(result.body),
-        );
+        final newEvents = upcomingEventListFromJson(result.body);
+        if (newEvents.length < pageSize) {
+          hasMoreUpcoming.value = false;
+        }
+        upcomingEventList.addAll(newEvents);
+      } else {
+        hasMoreUpcoming.value = false;
       }
     } catch (e) {
+      hasMoreUpcoming.value = false;
+    } finally {
+      isLoadingMoreUpcoming(false);
     }
   }
 
-  Future<void> _fetchPastEvents() async {
+  // Pagination for home screen - past events
+  Future<void> loadMorePastEvents() async {
+    if (isLoadingMorePast.value || !hasMorePast.value) return;
+
     try {
-      var result = await RemotePastEventService().get();
+      isLoadingMorePast(true);
+      pastPage++;
+
+      var result = await RemotePastEventService().getPaginated(
+        page: pastPage,
+        pageSize: pageSize,
+      );
+
       if (result != null && result.statusCode == 200) {
-        pastEventList.assignAll(pastEventListFromJson(result.body));
-        _localEventService.assignAllPastEvents(
-          events: pastEventListFromJson(result.body),
-        );
+        final newEvents = pastEventListFromJson(result.body);
+        if (newEvents.length < pageSize) {
+          hasMorePast.value = false;
+        }
+        pastEventList.addAll(newEvents);
+      } else {
+        hasMorePast.value = false;
       }
     } catch (e) {
+      hasMorePast.value = false;
+    } finally {
+      isLoadingMorePast(false);
     }
   }
 
+  // Initial load methods with pagination reset
   void getOngoingEvents() async {
     try {
       isOngoingEventLoading(true);
+      ongoingPage = 1;
+      hasMoreOngoing.value = true;
+
       //assigning local events before call api
       if (_localEventService.getOngoingEvents().isNotEmpty) {
         ongoingEventList.assignAll(_localEventService.getOngoingEvents());
       }
-      //call api
-      var result = await RemoteOngoingEventService().get();
+      //call api for first page
+      var result = await RemoteOngoingEventService().getPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
       if (result != null && result.statusCode == 200) {
         //assign api result
         ongoingEventList.assignAll(ongoingEventListFromJson(result.body));
@@ -177,10 +301,16 @@ class EventController extends GetxController {
   void getUpcomingEvents() async {
     try {
       isUpcomingEventLoading(true);
+      upcomingPage = 1;
+      hasMoreUpcoming.value = true;
+
       if (_localEventService.getUpcomingEvents().isNotEmpty) {
         upcomingEventList.assignAll(_localEventService.getUpcomingEvents());
       }
-      var result = await RemoteUpcomingEventService().get();
+      var result = await RemoteUpcomingEventService().getPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
       if (result != null && result.statusCode == 200) {
         upcomingEventList.assignAll(upcomingEventListFromJson(result.body));
         _localEventService.assignAllUpcomingEvents(
@@ -195,10 +325,16 @@ class EventController extends GetxController {
   void getPastEvents() async {
     try {
       isPastEventLoading(true);
+      pastPage = 1;
+      hasMorePast.value = true;
+
       if (_localEventService.getPastEvents().isNotEmpty) {
         pastEventList.assignAll(_localEventService.getPastEvents());
       }
-      var result = await RemotePastEventService().get();
+      var result = await RemotePastEventService().getPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
       if (result != null && result.statusCode == 200) {
         pastEventList.assignAll(pastEventListFromJson(result.body));
         _localEventService.assignAllPastEvents(

@@ -13,14 +13,34 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
+  late ScrollController _scrollController;
+
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+
     // Mark all notifications as clicked when user opens notification screen
     // This is standard badge behavior - badge disappears when screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationController.instance.markAllAsClicked();
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      // Load more when user is 300px from the bottom
+      NotificationController.instance.loadMoreNotifications();
+    }
   }
 
   @override
@@ -96,16 +116,43 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       .instance
                       .notificationList
                       .isNotEmpty) {
-                    // Show notifications
+                    // Show notifications with pagination
                     return ListView.builder(
+                      controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(
                         parent: BouncingScrollPhysics(),
                       ),
-                      itemCount: NotificationController
-                          .instance
-                          .notificationList
-                          .length,
+                      itemCount:
+                          NotificationController
+                              .instance
+                              .notificationList
+                              .length +
+                          (NotificationController.instance.hasMoreData.value
+                              ? 1
+                              : 0),
                       itemBuilder: (context, index) {
+                        // Show loading indicator at the bottom
+                        if (index ==
+                            NotificationController
+                                .instance
+                                .notificationList
+                                .length) {
+                          return Obx(
+                            () =>
+                                NotificationController
+                                    .instance
+                                    .isLoadingMore
+                                    .value
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          );
+                        }
+
                         return NotificationCard(
                           notification: NotificationController
                               .instance

@@ -11,6 +11,12 @@ class NotificationController extends GetxController {
   RxInt unreadCount = 0.obs;
   RxBool isInitialized = false.obs;
 
+  // Pagination states
+  RxBool isLoadingMore = false.obs;
+  RxBool hasMoreData = true.obs;
+  int currentPage = 1;
+  final int pageSize = 15; // Load 15 notifications at a time
+
   LocalNotificationService localNotificationService =
       LocalNotificationService();
   RemoteNotificationService remoteNotificationService =
@@ -28,7 +34,7 @@ class NotificationController extends GetxController {
       _loadCachedNotifications(); // Load from cache first for instant UI
 
       // Fetch fresh data in background (don't block initialization)
-      getNotifications().catchError((e) {
+      getNotificationsFirstPage().catchError((e) {
         // User still sees cached data, no error shown
       });
     } finally {
@@ -43,9 +49,12 @@ class NotificationController extends GetxController {
     }
   }
 
-  Future<void> getNotifications() async {
+  // Initial load - first page only
+  Future<void> getNotificationsFirstPage() async {
     try {
       isNotificationLoading(true);
+      currentPage = 1;
+      hasMoreData.value = true;
 
       // Load from cache first for instant display
       if (localNotificationService.getNotifications().isNotEmpty) {
@@ -53,29 +62,86 @@ class NotificationController extends GetxController {
         _updateUnreadCount();
       }
 
-      // Then fetch fresh data from API
-      var result = await remoteNotificationService.getNotifications();
-      if (result != null) {
+      // Fetch first page from API
+      var result = await remoteNotificationService.getNotificationsPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
+
+      if (result != null && result['notifications'] != null) {
+        final notifications =
+            result['notifications'] as List<NotificationModel>;
+        hasMoreData.value = result['has_more'] ?? false;
+
         // Preserve isClicked state from local storage
         final existingNotifications = localNotificationService
             .getNotifications();
-        for (var newNotification in result) {
+        for (var newNotification in notifications) {
           final existing = existingNotifications.firstWhereOrNull(
             (n) => n.id == newNotification.id,
           );
           if (existing != null) {
-            // Preserve the clicked state from local storage
             newNotification.isClicked = existing.isClicked;
           }
         }
-        localNotificationService.assignAllNotifications(notifications: result);
-        notificationList.assignAll(result);
+
+        localNotificationService.assignAllNotifications(
+          notifications: notifications,
+        );
+        notificationList.assignAll(notifications);
         _updateUnreadCount();
-      } else {
       }
     } finally {
       isNotificationLoading(false);
     }
+  }
+
+  // Load more notifications (pagination)
+  Future<void> loadMoreNotifications() async {
+    if (isLoadingMore.value || !hasMoreData.value) return;
+
+    try {
+      isLoadingMore(true);
+      currentPage++;
+
+      var result = await remoteNotificationService.getNotificationsPaginated(
+        page: currentPage,
+        pageSize: pageSize,
+      );
+
+      if (result != null && result['notifications'] != null) {
+        final newNotifications =
+            result['notifications'] as List<NotificationModel>;
+        hasMoreData.value = result['has_more'] ?? false;
+
+        // Preserve isClicked state
+        final existingNotifications = localNotificationService
+            .getNotifications();
+        for (var newNotification in newNotifications) {
+          final existing = existingNotifications.firstWhereOrNull(
+            (n) => n.id == newNotification.id,
+          );
+          if (existing != null) {
+            newNotification.isClicked = existing.isClicked;
+          }
+        }
+
+        // Append new notifications
+        notificationList.addAll(newNotifications);
+        _updateUnreadCount();
+      } else {
+        hasMoreData.value = false;
+      }
+    } catch (e) {
+      hasMoreData.value = false;
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  // Refresh - alias for first page load
+  Future<void> getNotifications() async {
+    return getNotificationsFirstPage();
   }
 
   void markAsClicked(NotificationModel notification) {

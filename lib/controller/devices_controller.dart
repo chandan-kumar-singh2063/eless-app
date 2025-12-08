@@ -8,6 +8,12 @@ class DevicesController extends GetxController {
   RxList<Device> deviceList = List<Device>.empty(growable: true).obs;
   RxBool isDeviceLoading = false.obs;
 
+  // Pagination states
+  RxBool isLoadingMore = false.obs;
+  RxBool hasMoreData = true.obs;
+  int currentPage = 1;
+  final int pageSize = 12; // Load 12 devices at a time (fits 2x6 grid)
+
   final LocalDeviceService _localDeviceService = LocalDeviceService();
 
   @override
@@ -21,7 +27,7 @@ class DevicesController extends GetxController {
     _loadCachedDevices(); // Load from cache first for instant UI
 
     // Fetch fresh data in background (don't block initialization)
-    getDevices().catchError((e) {
+    getDevicesFirstPage().catchError((e) {
       // User still sees cached data, no error shown
     });
   }
@@ -32,26 +38,68 @@ class DevicesController extends GetxController {
     }
   }
 
-  // Fetch fresh devices from API (called on pull-to-refresh)
-  Future<void> getDevices() async {
+  // Initial load - first page only
+  Future<void> getDevicesFirstPage() async {
     try {
       isDeviceLoading(true);
+      currentPage = 1;
+      hasMoreData.value = true;
 
       // Load from cache first for instant display
       if (_localDeviceService.getDevices().isNotEmpty) {
         deviceList.assignAll(_localDeviceService.getDevices());
       }
 
-      // Call API for fresh data
-      var result = await RemoteDeviceService().get();
-      if (result.isNotEmpty) {
-        deviceList.assignAll(result);
-        _localDeviceService.assignAllDevices(devices: result);
-      } else {
+      // Call API for first page
+      var result = await RemoteDeviceService().getPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
+
+      if (result['devices'] != null) {
+        final devices = result['devices'] as List<Device>;
+        hasMoreData.value = result['has_more'] ?? false;
+
+        deviceList.assignAll(devices);
+        _localDeviceService.assignAllDevices(devices: devices);
       }
     } finally {
       isDeviceLoading(false);
     }
+  }
+
+  // Load more devices (pagination)
+  Future<void> loadMoreDevices() async {
+    if (isLoadingMore.value || !hasMoreData.value) return;
+
+    try {
+      isLoadingMore(true);
+      currentPage++;
+
+      var result = await RemoteDeviceService().getPaginated(
+        page: currentPage,
+        pageSize: pageSize,
+      );
+
+      if (result['devices'] != null) {
+        final newDevices = result['devices'] as List<Device>;
+        hasMoreData.value = result['has_more'] ?? false;
+
+        // Append new devices
+        deviceList.addAll(newDevices);
+      } else {
+        hasMoreData.value = false;
+      }
+    } catch (e) {
+      hasMoreData.value = false;
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  // Fetch fresh devices from API (called on pull-to-refresh)
+  Future<void> getDevices() async {
+    return getDevicesFirstPage();
   }
 
   void getProductByCategory({required int id}) async {

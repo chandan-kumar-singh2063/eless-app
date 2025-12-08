@@ -6,8 +6,37 @@ import 'package:eless/theme/app_theme.dart';
 import 'package:eless/view/Explore/components/explore_event_card.dart';
 import 'package:eless/view/Explore/components/explore_event_loading_card.dart';
 
-class ExploreScreen extends StatelessWidget {
+class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
+
+  @override
+  State<ExploreScreen> createState() => _ExploreScreenState();
+}
+
+class _ExploreScreenState extends State<ExploreScreen> {
+  late ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      // Load more when user is 300px from the bottom
+      eventController.loadMoreAllEvents();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,30 +52,50 @@ class ExploreScreen extends StatelessWidget {
                 },
                 color: AppTheme.lightPrimaryColor,
                 child: Obx(() {
-                  // Show shimmer loading during refresh OR initial load
-                  if (eventController.isAllEventsLoading.value) {
-                    // Show loading state when loading or refreshing
+                  // Show shimmer loading during initial load
+                  if (eventController.isAllEventsLoading.value &&
+                      eventController.filteredEventsList.isEmpty) {
                     return ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: 6, // Show 6 loading cards
+                      itemCount: 6,
                       itemBuilder: (context, index) =>
                           const ExploreEventLoadingCard(),
                     );
                   } else if (eventController.filteredEventsList.isNotEmpty) {
-                    // Show filtered events
+                    // Show events with pagination
                     return ListView.builder(
+                      controller: _scrollController,
                       physics: const BouncingScrollPhysics(
                         parent: AlwaysScrollableScrollPhysics(),
                       ),
-                      itemCount: eventController.filteredEventsList.length,
+                      itemCount:
+                          eventController.filteredEventsList.length +
+                          (eventController.hasMoreData.value ? 1 : 0),
                       addAutomaticKeepAlives: true,
                       addRepaintBoundaries: true,
-                      itemBuilder: (context, index) => ExploreEventCard(
-                        key: ValueKey(
-                          eventController.filteredEventsList[index].id,
-                        ),
-                        event: eventController.filteredEventsList[index],
-                      ),
+                      itemBuilder: (context, index) {
+                        // Show loading indicator at the bottom
+                        if (index ==
+                            eventController.filteredEventsList.length) {
+                          return Obx(
+                            () => eventController.isLoadingMore.value
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          );
+                        }
+
+                        return ExploreEventCard(
+                          key: ValueKey(
+                            eventController.filteredEventsList[index].id,
+                          ),
+                          event: eventController.filteredEventsList[index],
+                        );
+                      },
                     );
                   } else {
                     // Show empty state

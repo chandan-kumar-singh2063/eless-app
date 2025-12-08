@@ -5,6 +5,23 @@ class RemoteUpcomingEventService {
   final _httpClient = HttpClientService.instance;
   var remoteUrl = '$baseUrl/events/api/flutter/upcoming';
 
+  // Paginated version
+  Future<dynamic> getPaginated({
+    required int page,
+    required int pageSize,
+  }) async {
+    try {
+      var response = await _httpClient.get(
+        Uri.parse('$remoteUrl?page=$page&page_size=$pageSize'),
+        timeout: const Duration(seconds: 12),
+      );
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Original method - kept for backward compatibility
   Future<dynamic> get() async {
     try {
       var response = await _httpClient.get(
