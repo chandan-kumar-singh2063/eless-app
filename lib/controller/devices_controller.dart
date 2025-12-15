@@ -11,6 +11,7 @@ class DevicesController extends GetxController {
   // Pagination states
   RxBool isLoadingMore = false.obs;
   RxBool hasMoreData = true.obs;
+  RxBool isRefreshing = false.obs; // ⚡ Silent background refresh flag
   int currentPage = 1;
   final int pageSize = 12; // Load 12 devices at a time (like events use 10)
 
@@ -134,8 +135,21 @@ class DevicesController extends GetxController {
   }
 
   // Fetch fresh devices from API (called on pull-to-refresh)
+  // ⚡ Optimized: Silent refresh without clearing existing data
   Future<void> getDevices() async {
-    return getDevicesFirstPage();
+    try {
+      isRefreshing(true);
+      currentPage = 1;
+      hasMoreData.value = true;
+
+      // Keep showing cached data while fetching (Instagram pattern)
+      // Don't call _loadCachedDevices() - data already visible
+
+      // Fetch first page silently in background
+      await _fetchDevicesPage(page: 1, isRefresh: true);
+    } finally {
+      isRefreshing(false);
+    }
   }
 
   void getProductByCategory({required int id}) async {

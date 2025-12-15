@@ -68,13 +68,13 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 child: Obx(() {
                   final controller = DevicesController.instance;
 
-                  // Show shimmer loading during initial load
-                  if (controller.isDeviceLoading.value &&
-                      controller.deviceList.isEmpty) {
-                    return const DeviceLoadingGrid();
-                  }
-
+                  // ⚡ Optimistic UI: Show shimmer ONLY when truly empty
+                  // During refresh, keep showing existing data (Instagram pattern)
                   if (controller.deviceList.isEmpty) {
+                    // Show shimmer only during initial load, not refresh
+                    if (controller.isDeviceLoading.value) {
+                      return const DeviceLoadingGrid();
+                    }
                     return _buildEmptyState(context);
                   }
 

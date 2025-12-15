@@ -28,6 +28,7 @@ class EventController extends GetxController {
   // Pagination states for explore/all events
   RxBool isLoadingMore = false.obs;
   RxBool hasMoreData = true.obs;
+  RxBool isRefreshing = false.obs; // ⚡ Silent background refresh flag
   int currentPage = 1;
   final int pageSize = 10; // Load 10 events at a time
 
@@ -171,8 +172,21 @@ class EventController extends GetxController {
   }
 
   // Method to fetch fresh data from API (called on pull-to-refresh)
+  // ⚡ Optimized: Silent refresh without clearing existing data
   Future<void> getAllEvents() async {
-    return getAllEventsFirstPage();
+    try {
+      isRefreshing(true);
+      currentPage = 1;
+      hasMoreData.value = true;
+
+      // Keep showing cached data while fetching (Instagram pattern)
+      // Don't call _loadCachedEvents() - data already visible
+
+      // Fetch first page silently in background
+      await _fetchAllEventsPage(page: 1, isRefresh: true);
+    } finally {
+      isRefreshing(false);
+    }
   }
 
   void _loadCachedEvents() {

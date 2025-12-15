@@ -66,18 +66,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 child: Obx(() {
                   final controller = eventController;
 
-                  // Show shimmer loading during initial load
-                  if (controller.isAllEventsLoading.value &&
-                      controller.filteredEventsList.isEmpty) {
-                    return ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: 6,
-                      itemBuilder: (context, index) =>
-                          const ExploreEventLoadingCard(),
-                    );
-                  }
-
+                  // ⚡ Optimistic UI: Show shimmer ONLY when truly empty
+                  // During refresh, keep showing existing data (Instagram pattern)
                   if (controller.filteredEventsList.isEmpty) {
+                    // Show shimmer only during initial load, not refresh
+                    if (controller.isAllEventsLoading.value) {
+                      return ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: 6,
+                        itemBuilder: (context, index) =>
+                            const ExploreEventLoadingCard(),
+                      );
+                    }
                     return _buildEmptyState(context);
                   }
 
