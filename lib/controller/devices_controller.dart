@@ -34,7 +34,9 @@ class DevicesController extends GetxController {
 
   void _loadCachedDevices() {
     if (_localDeviceService.getDevices().isNotEmpty) {
-      deviceList.assignAll(_localDeviceService.getDevices());
+      final devices = _localDeviceService.getDevices();
+      _sortDevicesAlphabetically(devices);
+      deviceList.assignAll(devices);
     }
   }
 
@@ -58,6 +60,9 @@ class DevicesController extends GetxController {
 
       if (result['devices'] != null) {
         final devices = result['devices'] as List<Device>;
+        // Sort devices alphabetically before displaying
+        _sortDevicesAlphabetically(devices);
+
         hasMoreData.value = result['has_more'] ?? false;
 
         deviceList.assignAll(devices);
@@ -85,8 +90,9 @@ class DevicesController extends GetxController {
         final newDevices = result['devices'] as List<Device>;
         hasMoreData.value = result['has_more'] ?? false;
 
-        // Append new devices
+        // Append new devices and re-sort entire list alphabetically
         deviceList.addAll(newDevices);
+        _sortDevicesAlphabetically(deviceList);
       } else {
         hasMoreData.value = false;
       }
@@ -106,5 +112,15 @@ class DevicesController extends GetxController {
     // For now, just get all devices since we don't have category filtering yet
     // You can implement category filtering later in your Django backend
     getDevices();
+  }
+
+  /// Sort devices alphabetically by name (A-Z)
+  /// Provides better UX by organizing devices in predictable order
+  void _sortDevicesAlphabetically(List<Device> devices) {
+    devices.sort((a, b) {
+      // Case-insensitive alphabetical comparison
+      // Converts to lowercase for consistent sorting regardless of case
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
   }
 }
