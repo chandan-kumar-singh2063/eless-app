@@ -19,6 +19,7 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   late ScrollController _scrollController;
   bool _hasCheckedPermission = false;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -43,10 +44,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   void _onScroll() {
+    // Guard 1: Prevent duplicate calls while loading
+    if (_isLoadingMore) return;
+
+    final controller = NotificationController.instance;
+
+    // Guard 2: Check if more data available before calculating position
+    if (!controller.hasMoreData.value) return;
+
+    // Guard 3: Only trigger when close to bottom
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
-      // Load more when user is 300px from the bottom
-      NotificationController.instance.loadMoreNotifications();
+      _isLoadingMore = true;
+      controller.loadMoreNotifications().then((_) {
+        if (mounted) {
+          _isLoadingMore = false;
+        }
+      });
     }
   }
 
@@ -244,54 +258,50 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 },
                 color: AppTheme.lightPrimaryColor,
                 child: Obx(() {
-                  if (NotificationController
-                          .instance
-                          .isNotificationLoading
-                          .value &&
-                      NotificationController
-                          .instance
-                          .notificationList
-                          .isEmpty) {
-                    // Show loading state
-                    return ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: BouncingScrollPhysics(),
+                  final controller = NotificationController.instance;
+
+                  // ⚡ Optimistic UI: Show shimmer ONLY when truly empty
+                  // During refresh, keep showing existing data (Instagram pattern)
+                  if (controller.notificationList.isEmpty) {
+                    // Show shimmer only during initial load, not refresh
+                    if (controller.isNotificationLoading.value) {
+                      return ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        itemCount: 6,
+                        itemBuilder: (context, index) =>
+                            const NotificationLoadingCard(),
+                      );
+                    }
+                    return _buildEmptyState();
+                  }
+
+                  // ⚡ Optimized: Use CustomScrollView with SliverList
+                  return CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    cacheExtent: 500, // Preload 500px for smooth scrolling
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            return NotificationCard(
+                              notification: controller.notificationList[index],
+                            );
+                          },
+                          childCount: controller.notificationList.length,
+                          addAutomaticKeepAlives: false, // Save memory
+                          addRepaintBoundaries: true,
+                        ),
                       ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) =>
-                          const NotificationLoadingCard(),
-                    );
-                  } else if (NotificationController
-                      .instance
-                      .notificationList
-                      .isNotEmpty) {
-                    // Show notifications with pagination
-                    return ListView.builder(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: BouncingScrollPhysics(),
-                      ),
-                      itemCount:
-                          NotificationController
-                              .instance
-                              .notificationList
-                              .length +
-                          (NotificationController.instance.hasMoreData.value
-                              ? 1
-                              : 0),
-                      itemBuilder: (context, index) {
-                        // Show loading indicator at the bottom
-                        if (index ==
-                            NotificationController
-                                .instance
-                                .notificationList
-                                .length) {
-                          return Obx(
-                            () =>
-                                NotificationController
-                                    .instance
-                                    .isLoadingMore
-                                    .value
+                      // Loading indicator as separate sliver
+                      if (controller.hasMoreData.value)
+                        SliverToBoxAdapter(
+                          child: Obx(
+                            () => controller.isLoadingMore.value
                                 ? Padding(
                                     padding: const EdgeInsets.all(16.0),
                                     child: Center(
@@ -300,21 +310,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                       ),
                                     ),
                                   )
-                                : const SizedBox.shrink(),
-                          );
-                        }
-
-                        return NotificationCard(
-                          notification: NotificationController
-                              .instance
-                              .notificationList[index],
-                        );
-                      },
-                    );
-                  } else {
-                    // Show empty state - wrap in scrollable to enable pull-to-refresh
-                    return _buildEmptyState();
-                  }
+                                : const SizedBox(height: 20),
+                          ),
+                        ),
+                    ],
+                  );
                 }),
               ),
             ),

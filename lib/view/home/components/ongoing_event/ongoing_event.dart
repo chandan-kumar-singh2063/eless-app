@@ -13,8 +13,13 @@ class OngoingEvent extends StatefulWidget {
   State<OngoingEvent> createState() => _OngoingEventState();
 }
 
-class _OngoingEventState extends State<OngoingEvent> {
+class _OngoingEventState extends State<OngoingEvent>
+    with AutomaticKeepAliveClientMixin {
   late ScrollController _scrollController;
+  bool _isLoadingMore = false;
+
+  @override
+  bool get wantKeepAlive => true; // ⚡ Preserve scroll position
 
   @override
   void initState() {
@@ -31,15 +36,27 @@ class _OngoingEventState extends State<OngoingEvent> {
   }
 
   void _onScroll() {
+    // Guard 1: Prevent duplicate calls while loading
+    if (_isLoadingMore) return;
+
+    // Guard 2: Check if more data available
+    if (!eventController.hasMoreOngoing.value) return;
+
+    // Guard 3: Only trigger when close to end
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      // Load more when user is 200px from the end
-      eventController.loadMoreOngoingEvents();
+      _isLoadingMore = true;
+      eventController.loadMoreOngoingEvents().then((_) {
+        if (mounted) {
+          _isLoadingMore = false;
+        }
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final screenWidth = MediaQuery.of(context).size.width;
     return Container(
       height: (screenWidth * 0.18).clamp(120, 160),
@@ -70,10 +87,7 @@ class _OngoingEventState extends State<OngoingEvent> {
             );
           }
 
-          return OngoingEventCard(
-            key: ValueKey(widget.events[index].id),
-            event: widget.events[index],
-          );
+          return OngoingEventCard(event: widget.events[index]);
         },
       ),
     );

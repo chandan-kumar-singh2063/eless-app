@@ -22,10 +22,20 @@ class NotificationController extends GetxController {
   RemoteNotificationService remoteNotificationService =
       RemoteNotificationService();
 
+  // ⚡ Performance: In-memory cache to avoid repeated Hive reads
+  List<NotificationModel>? _cachedNotifications;
+  RxBool isRefreshing = false.obs; // Silent background refresh flag
+
   @override
   void onInit() {
     super.onInit();
     _initialize();
+  }
+
+  @override
+  void onClose() {
+    _cachedNotifications = null;
+    super.onClose();
   }
 
   Future<void> _initialize() async {
@@ -43,9 +53,17 @@ class NotificationController extends GetxController {
   }
 
   void _loadCachedNotifications() {
-    if (localNotificationService.getNotifications().isNotEmpty) {
-      notificationList.assignAll(localNotificationService.getNotifications());
+    // ⚡ Load from memory cache first (instant)
+    if (_cachedNotifications != null && _cachedNotifications!.isNotEmpty) {
+      notificationList.assignAll(_cachedNotifications!);
       _updateUnreadCount();
+    } else {
+      final cached = localNotificationService.getNotifications();
+      if (cached.isNotEmpty) {
+        _cachedNotifications = cached;
+        notificationList.assignAll(cached);
+        _updateUnreadCount();
+      }
     }
   }
 
@@ -88,6 +106,10 @@ class NotificationController extends GetxController {
         localNotificationService.assignAllNotifications(
           notifications: notifications,
         );
+
+        // ⚡ Update memory cache immediately
+        _cachedNotifications = List.from(notifications);
+
         notificationList.assignAll(notifications);
         _updateUnreadCount();
       }
@@ -128,6 +150,10 @@ class NotificationController extends GetxController {
 
         // Append new notifications
         notificationList.addAll(newNotifications);
+
+        // ⚡ Update memory cache without disk write (save I/O)
+        _cachedNotifications = List.from(notificationList);
+
         _updateUnreadCount();
       } else {
         hasMoreData.value = false;
@@ -139,9 +165,50 @@ class NotificationController extends GetxController {
     }
   }
 
-  // Refresh - alias for first page load
+  // Refresh - optimistic silent refresh (Instagram pattern)
   Future<void> getNotifications() async {
-    return getNotificationsFirstPage();
+    try {
+      isRefreshing(true);
+      currentPage = 1;
+      hasMoreData.value = true;
+
+      // Keep showing cached data while fetching (Instagram pattern)
+      // Fetch first page silently in background
+      var result = await remoteNotificationService.getNotificationsPaginated(
+        page: 1,
+        pageSize: pageSize,
+      );
+
+      if (result != null && result['notifications'] != null) {
+        final notifications =
+            result['notifications'] as List<NotificationModel>;
+        hasMoreData.value = result['has_more'] ?? false;
+
+        // Preserve isClicked state
+        final existingNotifications = localNotificationService
+            .getNotifications();
+        for (var newNotification in notifications) {
+          final existing = existingNotifications.firstWhereOrNull(
+            (n) => n.id == newNotification.id,
+          );
+          if (existing != null) {
+            newNotification.isClicked = existing.isClicked;
+          }
+        }
+
+        localNotificationService.assignAllNotifications(
+          notifications: notifications,
+        );
+
+        // ⚡ Update memory cache
+        _cachedNotifications = List.from(notifications);
+
+        notificationList.assignAll(notifications);
+        _updateUnreadCount();
+      }
+    } finally {
+      isRefreshing(false);
+    }
   }
 
   void markAsClicked(NotificationModel notification) {

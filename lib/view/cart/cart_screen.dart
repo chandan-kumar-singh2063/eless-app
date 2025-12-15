@@ -100,34 +100,45 @@ class _CartScreenState extends State<CartScreen> {
                 onRefresh: _loadCart,
                 color: AppTheme.lightPrimaryColor,
                 child: Obx(() {
-                  final isLoading = CartController.instance.isCartLoading.value;
-                  final cartList = CartController.instance.cartList;
+                  final controller = CartController.instance;
 
-                  // Loading State (initial load only)
-                  if (isLoading && cartList.isEmpty) {
-                    return ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: BouncingScrollPhysics(),
-                      ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) => const CartLoadingCard(),
-                    );
-                  }
-
-                  // Empty State
-                  if (!isLoading && cartList.isEmpty) {
+                  // ⚡ Optimistic UI: Show shimmer ONLY when truly empty
+                  // During refresh, keep showing existing data (Instagram pattern)
+                  if (controller.cartList.isEmpty) {
+                    // Show shimmer only during initial load, not refresh
+                    if (controller.isCartLoading.value) {
+                      return ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        itemCount: 6,
+                        itemBuilder: (context, index) =>
+                            const CartLoadingCard(),
+                      );
+                    }
                     return _buildEmptyState();
                   }
 
-                  // Cart Items - RefreshIndicator already shows loading
-                  return ListView.builder(
+                  // ⚡ Optimized: Use CustomScrollView with SliverList
+                  return CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics(),
                     ),
-                    itemCount: cartList.length,
-                    itemBuilder: (context, index) {
-                      return CartCard(cartItem: cartList[index]);
-                    },
+                    cacheExtent: 500, // Preload 500px for smooth scrolling
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            return CartCard(
+                              cartItem: controller.cartList[index],
+                            );
+                          },
+                          childCount: controller.cartList.length,
+                          addAutomaticKeepAlives: false, // Save memory
+                          addRepaintBoundaries: true,
+                        ),
+                      ),
+                    ],
                   );
                 }),
               ),

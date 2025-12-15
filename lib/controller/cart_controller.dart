@@ -1,4 +1,3 @@
-
 import 'package:get/get.dart';
 import '../model/cart_item.dart';
 import '../service/remote_service/cart_service.dart';
@@ -12,7 +11,12 @@ class CartController extends GetxController {
   // Observable variables
   RxList<CartItem> cartList = <CartItem>[].obs;
   RxBool isCartLoading = false.obs;
+  RxBool isRefreshing = false.obs; // Silent background refresh flag
   RxBool isInitialized = false.obs;
+
+  // ⚡ Performance: In-memory cache to avoid repeated API calls
+  List<CartItem>? _cachedCartItems;
+  DateTime? _lastFetch;
 
   // Cart summary counts
   RxInt totalRequests = 0.obs;
@@ -34,8 +38,7 @@ class CartController extends GetxController {
       // Only load cart for logged-in users
       if (AuthController.instance.isLoggedIn) {
         await loadCart();
-      } else {
-      }
+      } else {}
       isInitialized(true);
     } catch (e) {
       isInitialized(true); // Still mark as initialized to prevent loops
@@ -69,19 +72,32 @@ class CartController extends GetxController {
       return;
     }
 
+    // ⚡ Load from memory cache first (instant)
+    if (_cachedCartItems != null && _lastFetch != null) {
+      final cacheAge = DateTime.now().difference(_lastFetch!);
+      if (cacheAge.inMinutes < 5) {
+        cartList.assignAll(_cachedCartItems!);
+        _updateCounts();
+        return; // Use cache if < 5 minutes old
+      }
+    }
+
     try {
       isCartLoading(true);
 
       final items = await _cartService.getUserDeviceRequests(
         userUniqueId: userUniqueId,
       );
+
+      // ⚡ Update memory cache
+      _cachedCartItems = List.from(items);
+      _lastFetch = DateTime.now();
+
       cartList.assignAll(items);
 
       // Update counts
       _updateCounts();
-
     } catch (e) {
-
       // Show error to user if requested
       if (showError) {
         Get.snackbar(
@@ -100,7 +116,32 @@ class CartController extends GetxController {
     if (!AuthController.instance.isLoggedIn) {
       return;
     }
-    await loadCart();
+
+    // ⚡ Optimistic silent refresh (Instagram pattern)
+    final userUniqueId = AuthController.instance.user.value?.id;
+    if (userUniqueId == null || userUniqueId.isEmpty) {
+      return;
+    }
+
+    try {
+      isRefreshing(true);
+
+      // Keep showing cached data while fetching
+      final items = await _cartService.getUserDeviceRequests(
+        userUniqueId: userUniqueId,
+      );
+
+      // ⚡ Update memory cache
+      _cachedCartItems = List.from(items);
+      _lastFetch = DateTime.now();
+
+      cartList.assignAll(items);
+      _updateCounts();
+    } catch (e) {
+      // Silent fail - old data stays visible
+    } finally {
+      isRefreshing(false);
+    }
   }
 
   void _updateCounts() {
@@ -110,7 +151,6 @@ class CartController extends GetxController {
     rejectedCount.value = cartList.where((item) => item.isRejected).length;
     returnedCount.value = cartList.where((item) => item.isReturned).length;
     overdueCount.value = cartList.where((item) => item.isOverdueStatus).length;
-
   }
 
   // Get cart items by status
@@ -146,5 +186,9 @@ class CartController extends GetxController {
     rejectedCount.value = 0;
     returnedCount.value = 0;
     overdueCount.value = 0;
+
+    // ⚡ Clear memory cache
+    _cachedCartItems = null;
+    _lastFetch = null;
   }
 }

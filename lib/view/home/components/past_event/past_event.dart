@@ -13,8 +13,13 @@ class PastEvent extends StatefulWidget {
   State<PastEvent> createState() => _PastEventState();
 }
 
-class _PastEventState extends State<PastEvent> {
+class _PastEventState extends State<PastEvent>
+    with AutomaticKeepAliveClientMixin {
   late ScrollController _scrollController;
+  bool _isLoadingMore = false;
+
+  @override
+  bool get wantKeepAlive => true; // ⚡ Preserve scroll position
 
   @override
   void initState() {
@@ -31,15 +36,27 @@ class _PastEventState extends State<PastEvent> {
   }
 
   void _onScroll() {
+    // Guard 1: Prevent duplicate calls while loading
+    if (_isLoadingMore) return;
+
+    // Guard 2: Check if more data available
+    if (!eventController.hasMorePast.value) return;
+
+    // Guard 3: Only trigger when close to end
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      // Load more when user is 200px from the end
-      eventController.loadMorePastEvents();
+      _isLoadingMore = true;
+      eventController.loadMorePastEvents().then((_) {
+        if (mounted) {
+          _isLoadingMore = false;
+        }
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final screenWidth = MediaQuery.of(context).size.width;
     return Container(
       height: (screenWidth * 0.18).clamp(120, 160),
@@ -69,10 +86,7 @@ class _PastEventState extends State<PastEvent> {
             );
           }
 
-          return PastEventCard(
-            key: ValueKey(widget.events[index].id),
-            event: widget.events[index],
-          );
+          return PastEventCard(event: widget.events[index]);
         },
       ),
     );
