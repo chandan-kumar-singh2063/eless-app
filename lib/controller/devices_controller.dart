@@ -57,10 +57,15 @@ class DevicesController extends GetxController {
       if (cacheAge.inMinutes < 5) {
         deviceList.assignAll(_cachedDevices!);
         return;
+      } else {
+        final devices = _localDeviceService.getDevices();
+        if (devices.isNotEmpty) {
+          _cachedDevices = devices;
+          _lastFetch = DateTime.now();
+          deviceList.assignAll(devices);
+        }
       }
-    }
-    // ⚡ Fall back to Hive if cache expired
-    if (_localDeviceService.getDevices().isNotEmpty) {
+    } else if (_localDeviceService.getDevices().isNotEmpty) {
       final devices = _localDeviceService.getDevices();
       _cachedDevices = devices;
       _lastFetch = DateTime.now();
@@ -136,7 +141,7 @@ class DevicesController extends GetxController {
           _lastFetch = DateTime.now();
 
           // ⚡ Batch write to Hive (only on refresh)
-          _localDeviceService.assignAllDevices(devices: devices);
+          await _localDeviceService.assignAllDevices(devices: devices);
         } else {
           // Append data (pagination)
           deviceList.addAll(devices);

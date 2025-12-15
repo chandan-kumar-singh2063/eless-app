@@ -158,7 +158,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Check back later for new devices',
+                  'Please check your connection and pull down to refresh',
                   style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
