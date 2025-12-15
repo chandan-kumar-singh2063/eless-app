@@ -12,7 +12,8 @@ class DevicesController extends GetxController {
   RxBool isLoadingMore = false.obs;
   RxBool hasMoreData = true.obs;
   int currentPage = 1;
-  final int pageSize = 12; // Load 12 devices at a time (fits 2x6 grid)
+  final int pageSize =
+      40; // Load ALL devices at once - 40 devices is small dataset
 
   final LocalDeviceService _localDeviceService = LocalDeviceService();
 
@@ -35,24 +36,21 @@ class DevicesController extends GetxController {
   void _loadCachedDevices() {
     if (_localDeviceService.getDevices().isNotEmpty) {
       final devices = _localDeviceService.getDevices();
-      _sortDevicesAlphabetically(devices);
+      // Sort only once when loading from cache
+      devices.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
       deviceList.assignAll(devices);
     }
   }
 
-  // Initial load - first page only
+  // Initial load - loads ALL devices (40 devices is small dataset)
   Future<void> getDevicesFirstPage() async {
     try {
       isDeviceLoading(true);
       currentPage = 1;
-      hasMoreData.value = true;
 
-      // Load from cache first for instant display
-      if (_localDeviceService.getDevices().isNotEmpty) {
-        deviceList.assignAll(_localDeviceService.getDevices());
-      }
-
-      // Call API for first page
+      // Call API for all devices at once (page_size=40)
       var result = await RemoteDeviceService().getPaginated(
         page: 1,
         pageSize: pageSize,
@@ -60,47 +58,30 @@ class DevicesController extends GetxController {
 
       if (result['devices'] != null) {
         final devices = result['devices'] as List<Device>;
-        // Sort devices alphabetically before displaying
-        _sortDevicesAlphabetically(devices);
 
-        hasMoreData.value = result['has_more'] ?? false;
+        // Sort once before saving
+        devices.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
 
+        // Update UI and cache
         deviceList.assignAll(devices);
         _localDeviceService.assignAllDevices(devices: devices);
+
+        // No pagination needed for 40 devices
+        hasMoreData.value = false;
       }
+    } catch (e) {
+      // Keep showing cached data on error
     } finally {
       isDeviceLoading(false);
     }
   }
 
-  // Load more devices (pagination)
+  // Pagination not needed - 40 devices loads instantly
   Future<void> loadMoreDevices() async {
-    if (isLoadingMore.value || !hasMoreData.value) return;
-
-    try {
-      isLoadingMore(true);
-      currentPage++;
-
-      var result = await RemoteDeviceService().getPaginated(
-        page: currentPage,
-        pageSize: pageSize,
-      );
-
-      if (result['devices'] != null) {
-        final newDevices = result['devices'] as List<Device>;
-        hasMoreData.value = result['has_more'] ?? false;
-
-        // Append new devices and re-sort entire list alphabetically
-        deviceList.addAll(newDevices);
-        _sortDevicesAlphabetically(deviceList);
-      } else {
-        hasMoreData.value = false;
-      }
-    } catch (e) {
-      hasMoreData.value = false;
-    } finally {
-      isLoadingMore(false);
-    }
+    // No-op: All devices loaded on first page
+    return;
   }
 
   // Fetch fresh devices from API (called on pull-to-refresh)
@@ -112,15 +93,5 @@ class DevicesController extends GetxController {
     // For now, just get all devices since we don't have category filtering yet
     // You can implement category filtering later in your Django backend
     getDevices();
-  }
-
-  /// Sort devices alphabetically by name (A-Z)
-  /// Provides better UX by organizing devices in predictable order
-  void _sortDevicesAlphabetically(List<Device> devices) {
-    devices.sort((a, b) {
-      // Case-insensitive alphabetical comparison
-      // Converts to lowercase for consistent sorting regardless of case
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
   }
 }

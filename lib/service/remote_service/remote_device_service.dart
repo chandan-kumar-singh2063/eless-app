@@ -15,7 +15,7 @@ class RemoteDeviceService {
     try {
       var response = await _httpClient.get(
         Uri.parse('$remoteUrl/?page=$page&page_size=$pageSize'),
-        timeout: const Duration(seconds: 12),
+        timeout: const Duration(seconds: 5),
       );
 
       if (response.statusCode == 200) {

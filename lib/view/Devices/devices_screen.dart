@@ -14,28 +14,14 @@ class DevicesScreen extends StatefulWidget {
 }
 
 class _DevicesScreenState extends State<DevicesScreen> {
-  late ScrollController _scrollController;
-
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
     super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      // Load more when user is 300px from the bottom
-      DevicesController.instance.loadMoreDevices();
-    }
   }
 
   @override
@@ -58,7 +44,6 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     return const DeviceLoadingGrid();
                   } else if (DevicesController.instance.deviceList.isNotEmpty) {
                     return GridView.builder(
-                      controller: _scrollController,
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 200,
@@ -70,32 +55,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         parent: AlwaysScrollableScrollPhysics(),
                       ),
                       padding: const EdgeInsets.all(10),
-                      itemCount:
-                          DevicesController.instance.deviceList.length +
-                          (DevicesController.instance.hasMoreData.value
-                              ? 1
-                              : 0),
-                      cacheExtent: 500,
+                      itemCount: DevicesController.instance.deviceList.length,
+                      cacheExtent:
+                          1000, // Increased cache for smoother scrolling
                       addRepaintBoundaries: true,
                       addAutomaticKeepAlives: true,
                       itemBuilder: (context, index) {
-                        // Show loading indicator at the bottom
-                        if (index ==
-                            DevicesController.instance.deviceList.length) {
-                          return Obx(
-                            () => DevicesController.instance.isLoadingMore.value
-                                ? Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: CircularProgressIndicator(
-                                        color: AppTheme.lightPrimaryColor,
-                                      ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          );
-                        }
-
                         return DeviceCard(
                           key: ValueKey(
                             DevicesController.instance.deviceList[index].id,
