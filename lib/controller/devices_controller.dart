@@ -41,9 +41,12 @@ class DevicesController extends GetxController {
     await _localDeviceService.init();
     _loadCachedDevices(); // Load from cache first for instant UI
 
-    // Fetch fresh data in background (don't block initialization)
-    getDevicesFirstPage().catchError((e) {
-      // User still sees cached data, no error shown
+    // ⚡ Fetch fresh data in background WITHOUT triggering loading state
+    // Don't call getDevicesFirstPage() - it sets isDeviceLoading which shows shimmer
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _fetchDevicesPage(page: 1, isRefresh: true).catchError((e) {
+        // User still sees cached data, no error shown
+      });
     });
   }
 
