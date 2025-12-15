@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:eless/controller/notification_controller.dart';
+import 'package:eless/controller/auth_controller.dart';
+import 'package:eless/service/fcm_token_manager.dart';
 import 'package:eless/theme/app_theme.dart';
 import 'package:eless/view/notification/components/notification_card.dart';
 import 'package:eless/view/notification/components/notification_loading_card.dart';
@@ -14,6 +18,7 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   late ScrollController _scrollController;
+  bool _hasCheckedPermission = false;
 
   @override
   void initState() {
@@ -25,6 +30,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     // This is standard badge behavior - badge disappears when screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationController.instance.markAllAsClicked();
+      // Check notification permission after screen fully loaded
+      _checkAndRequestNotificationPermission();
     });
   }
 
@@ -40,6 +47,146 @@ class _NotificationScreenState extends State<NotificationScreen> {
         _scrollController.position.maxScrollExtent - 300) {
       // Load more when user is 300px from the bottom
       NotificationController.instance.loadMoreNotifications();
+    }
+  }
+
+  /// Check notification permission and show dialog if denied
+  /// Only checks once per screen visit to avoid annoying user
+  Future<void> _checkAndRequestNotificationPermission() async {
+    if (_hasCheckedPermission) return;
+    _hasCheckedPermission = true;
+
+    try {
+      // Check current FCM notification settings
+      final settings = await FirebaseMessaging.instance
+          .getNotificationSettings();
+
+      // If permission is denied, show alert dialog
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        _showPermissionDeniedDialog();
+      }
+      // If permission is granted but token not registered, register it
+      else if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        await _ensureTokenRegistered();
+      }
+    } catch (e) {
+      // Silent fail - don't interrupt user experience
+    }
+  }
+
+  /// Ensure FCM token is registered with backend
+  /// Called when permission is granted but token might not be registered
+  Future<void> _ensureTokenRegistered() async {
+    try {
+      final authController = AuthController.instance;
+      if (authController.isLoggedIn && authController.user.value != null) {
+        final userUniqueId = authController.user.value!.id;
+        final fcmTokenManager = FCMTokenManager();
+
+        // Register token in background (won't show any UI)
+        await fcmTokenManager.registerFCMToken(userUniqueId);
+      }
+    } catch (e) {
+      // Silent fail
+    }
+  }
+
+  /// Show alert dialog when notification permission is denied
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.notifications_off_outlined,
+              color: AppTheme.lightPrimaryColor,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Turn on Notifications!!',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Turn on notifications to get notified with important notices',
+          style: TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Not Now',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _openAppSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.lightPrimaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Open app settings so user can enable notifications
+  /// Also listen for when user returns to re-check permission
+  Future<void> _openAppSettings() async {
+    try {
+      // Open app settings
+      await openAppSettings();
+
+      // When user returns from settings, re-check permission
+      // Wait a bit for settings to apply
+      await Future.delayed(const Duration(seconds: 1));
+
+      final settings = await FirebaseMessaging.instance
+          .getNotificationSettings();
+
+      // If permission now granted, register token
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        await _ensureTokenRegistered();
+
+        // Show success message
+        if (mounted) {
+          Get.snackbar(
+            'Notifications Enabled',
+            'You will now receive important notifications',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+            margin: const EdgeInsets.all(16),
+          );
+        }
+      }
+    } catch (e) {
+      // Silent fail
     }
   }
 
