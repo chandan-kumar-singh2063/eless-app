@@ -35,23 +35,30 @@ import 'firebase_options.dart';
 /// Called when app receives FCM message while in background/terminated state
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  log('📬 Background FCM message: ${message.messageId}');
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    log('📬 Background FCM message: ${message.messageId}');
 
-  final notification = message.notification;
-  final data = message.data;
+    final notification = message.notification;
+    final data = message.data;
 
-  final String title = notification?.title ?? data['title'] ?? 'Notification';
-  final String body = notification?.body ?? data['body'] ?? '';
-  final String? imageUrl = notification?.android?.imageUrl ?? data['image'];
+    final String title = notification?.title ?? data['title'] ?? 'Notification';
+    final String body = notification?.body ?? data['body'] ?? '';
+    final String? imageUrl = notification?.android?.imageUrl ?? data['image'];
 
-  log('  Title: $title');
-  log('  Body: $body');
-  log('  Image: ${imageUrl ?? "none"}');
-  log('  Data: ${message.data}');
+    log('  Title: $title');
+    log('  Body: $body');
+    log('  Image: ${imageUrl ?? "none"}');
+    log('  Data: ${message.data}');
 
-  // Show local notification with image (when app is closed)
-  await _showBackgroundNotification(title, body, imageUrl, data);
+    // Show local notification with image (when app is closed)
+    await _showBackgroundNotification(title, body, imageUrl, data);
+  } catch (e) {
+    log('❌ Background FCM handler error: $e');
+    // Don't crash - just log the error
+  }
 }
 
 /// Show notification when app is in background/terminated
@@ -160,6 +167,12 @@ Future<String?> _downloadImageBackground(String url) async {
 
       if (await file.exists()) {
         log('✅ Background image saved: $filePath');
+
+        // ⚡ Cleanup old notification images (prevent memory leak)
+        _cleanupOldNotificationImages(directory).catchError((e) {
+          log('⚠️ Cleanup failed: $e');
+        });
+
         return filePath;
       }
     }
@@ -167,6 +180,29 @@ Future<String?> _downloadImageBackground(String url) async {
     log('❌ Background download failed: $e');
   }
   return null;
+}
+
+/// Clean up old notification images to prevent temp directory bloat
+Future<void> _cleanupOldNotificationImages(Directory directory) async {
+  try {
+    final files = directory.listSync();
+    final now = DateTime.now();
+
+    for (final file in files) {
+      if (file is File && file.path.contains('bg_notif_')) {
+        final stat = await file.stat();
+        final age = now.difference(stat.modified);
+
+        // Delete images older than 24 hours
+        if (age.inHours > 24) {
+          await file.delete();
+          log('🗑️ Deleted old notification image: ${file.path}');
+        }
+      }
+    }
+  } catch (e) {
+    log('⚠️ Cleanup error: $e');
+  }
 }
 
 void main() async {
@@ -186,6 +222,7 @@ void main() async {
     Hive.registerAdapter(AdBannerAdapter()); // typeId: 1
     Hive.registerAdapter(CategoryAdapter()); // typeId: 2
     Hive.registerAdapter(UserAdapter()); // typeId: 3
+    // ⚠️ typeId: 4 is reserved/skipped - DO NOT USE
     Hive.registerAdapter(EventAdapter()); // typeId: 5
     Hive.registerAdapter(DeviceAdapter()); // typeId: 6
     Hive.registerAdapter(NotificationModelAdapter()); // typeId: 7
@@ -241,11 +278,13 @@ void main() async {
       authController.userUniqueId.value.isNotEmpty) {
     // IMPORTANT: Use userUniqueId (ROBO-2024-003 format) not user.id (database ID)
     final userUniqueId = authController.userUniqueId.value;
-    // Run in background (don't block app launch)
-    Future.delayed(const Duration(seconds: 5), () {
-      fcmTokenManager.registerFCMToken(userUniqueId);
+    // Run in background with reduced delay (3s is enough for app to be ready)
+    Future.delayed(const Duration(seconds: 3), () {
+      fcmTokenManager.registerFCMToken(userUniqueId).catchError((e) {
+        log('⚠️ FCM registration failed: $e');
+      });
     });
-    log('🔔 FCM token registration scheduled for background');
+    log('🔔 FCM token registration scheduled (3s delay)');
   }
 
   log('✅ All initialization complete - launching app');

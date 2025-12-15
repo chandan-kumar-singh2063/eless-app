@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:eless/service/local_service/local_auth_service.dart';
@@ -177,13 +178,15 @@ class AuthController extends GetxController {
             _localAuthService.addUser(user: user.value!).catchError((e) {});
 
             // 🔔 Register FCM token in background (after backend session is established)
-            // Wait 10 seconds to ensure backend user session is fully ready
+            // Reduced to 3 seconds (enough for backend to be ready)
             // IMPORTANT: Use uniqueId (ROBO-2024-003) not user.id (database ID)
-            Future.delayed(const Duration(seconds: 10), () {
+            Future.delayed(const Duration(seconds: 3), () {
               _fcmTokenManager
                   .registerFCMToken(uniqueId)
                   .then((_) {})
-                  .catchError((e) {});
+                  .catchError((e) {
+                    log('⚠️ FCM token registration failed: $e');
+                  });
             });
 
             return 'SUCCESS';
