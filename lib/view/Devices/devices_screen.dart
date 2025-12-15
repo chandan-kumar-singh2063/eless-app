@@ -158,7 +158,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Please check your connection and pull down to refresh',
+                  'No Internet Connection or Pull Down to Refresh',
                   style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
