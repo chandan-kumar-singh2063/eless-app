@@ -237,8 +237,10 @@ void main() async {
   log('✅ FCM Token Manager initialized');
 
   // If user is logged in, register FCM token in background
-  if (authController.isLoggedIn && authController.user.value != null) {
-    final userUniqueId = authController.user.value!.id; // Use 'id' field
+  if (authController.isLoggedIn &&
+      authController.userUniqueId.value.isNotEmpty) {
+    // IMPORTANT: Use userUniqueId (ROBO-2024-003 format) not user.id (database ID)
+    final userUniqueId = authController.userUniqueId.value;
     // Run in background (don't block app launch)
     Future.delayed(const Duration(seconds: 5), () {
       fcmTokenManager.registerFCMToken(userUniqueId);

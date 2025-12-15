@@ -23,6 +23,8 @@ class AuthController extends GetxController {
   // State
   Rxn<User> user = Rxn<User>();
   Rxn<JwtToken> jwtToken = Rxn<JwtToken>();
+  RxString userUniqueId =
+      ''.obs; // Store unique_id (ROBO-2024-003 format) for FCM token
 
   // UI State
   RxBool isLoggingOut = false.obs;
@@ -89,7 +91,9 @@ class AuthController extends GetxController {
     try {
       User? storedUser = _localAuthService.getUser();
       if (storedUser != null) {
-        user.value = storedUser;
+        user.value =
+            storedUser; // Store user.id as userUniqueId (should be ROBO-2024-003 format)
+        userUniqueId.value = storedUser.id;
       } else {
         // No stored user - check if we have refresh token but no user data
         // This can happen after app reinstall or storage corruption
@@ -166,11 +170,15 @@ class AuthController extends GetxController {
               user.value = User(id: uniqueId, fullName: 'User', email: '');
             }
 
+            // ⚡ Store unique_id for FCM token registration (ROBO-2024-003 format)
+            userUniqueId.value = uniqueId;
+
             // ⚡ Save to Hive asynchronously (don't wait)
             _localAuthService.addUser(user: user.value!).catchError((e) {});
 
             // 🔔 Register FCM token in background (after backend session is established)
             // Wait 10 seconds to ensure backend user session is fully ready
+            // IMPORTANT: Use uniqueId (ROBO-2024-003) not user.id (database ID)
             Future.delayed(const Duration(seconds: 10), () {
               _fcmTokenManager
                   .registerFCMToken(uniqueId)
@@ -221,6 +229,7 @@ class AuthController extends GetxController {
       // NOW clear tokens and user data
       user.value = null;
       jwtToken.value = null;
+      userUniqueId.value = '';
       _apiClient.clearAccessToken();
       await _localAuthService.clear();
 

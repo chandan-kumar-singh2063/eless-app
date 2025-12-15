@@ -80,8 +80,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _ensureTokenRegistered() async {
     try {
       final authController = AuthController.instance;
-      if (authController.isLoggedIn && authController.user.value != null) {
-        final userUniqueId = authController.user.value!.id;
+      if (authController.isLoggedIn &&
+          authController.userUniqueId.value.isNotEmpty) {
+        // IMPORTANT: Use userUniqueId (ROBO-2024-003 format) not user.id (database ID)
+        final userUniqueId = authController.userUniqueId.value;
         final fcmTokenManager = FCMTokenManager();
 
         // Register token in background (won't show any UI)
