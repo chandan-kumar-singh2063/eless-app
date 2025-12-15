@@ -72,49 +72,54 @@ class AuthController extends GetxController {
     try {
       await checkExistingUser();
       await restoreJwtSession();
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  /// Check existing user
+  /// Check existing user from local storage
+  /// This loads cached user data for offline access
   Future<void> checkExistingUser() async {
     try {
       User? storedUser = _localAuthService.getUser();
       if (storedUser != null) {
         user.value = storedUser;
+      } else {
+        // No stored user - check if we have refresh token but no user data
+        // This can happen after app reinstall or storage corruption
+        if (_jwtAuthService.hasRefreshToken()) {
+          // Create temporary user until we can fetch from backend
+          user.value = User(id: 'loading', fullName: 'User', email: '');
+        }
       }
     } catch (e) {
+      // Error loading user - don't fail, just log
     }
   }
 
   /// Restore JWT session from refresh token
+  /// CRITICAL: Don't clear user data on network errors - only on invalid tokens
   Future<void> restoreJwtSession() async {
     try {
       final result = await _jwtAuthService.restoreSession();
       result.when(
         success: (restored) async {
           if (restored) {
-
-            // 5️⃣ Flush offline queue on app start
+            // Session restored - flush offline queue
             await _deviceService.flushOfflineQueue();
           } else {
-            // Clear user data if JWT session cannot be restored
+            // No refresh token found - truly logged out
             user.value = null;
             await _localAuthService.clear();
           }
         },
-        error: (error) async {
-          // Clear user data on restore failure
-          user.value = null;
-          await _localAuthService.clear();
-          _apiClient.clearAccessToken();
+        error: (error, {int? statusCode}) async {
+          // NETWORK ERROR - Keep user logged in!
+          // They have valid tokens, just no connectivity
+          // Don't clear anything - user stays logged in with cached data
         },
       );
     } catch (e) {
-      // Clear user data on exception
-      user.value = null;
-      await _localAuthService.clear();
-      _apiClient.clearAccessToken();
+      // Exception during restore (likely network)
+      // Don't clear user data - let them stay logged in offline
     }
   }
 
@@ -145,7 +150,6 @@ class AuthController extends GetxController {
           jwtToken.value = token;
           _apiClient.setAccessToken(token.accessToken);
 
-
           // Step 3: Parse user data and save to Hive (async, non-blocking)
           try {
             if (token.userData != null && token.userData!.containsKey('id')) {
@@ -155,19 +159,15 @@ class AuthController extends GetxController {
             }
 
             // ⚡ Save to Hive asynchronously (don't wait)
-            _localAuthService.addUser(user: user.value!).catchError((e) {
-            });
-
+            _localAuthService.addUser(user: user.value!).catchError((e) {});
 
             // 🔔 Register FCM token in background (after backend session is established)
             // Wait 10 seconds to ensure backend user session is fully ready
             Future.delayed(const Duration(seconds: 10), () {
               _fcmTokenManager
                   .registerFCMToken(uniqueId)
-                  .then((_) {
-                  })
-                  .catchError((e) {
-                  });
+                  .then((_) {})
+                  .catchError((e) {});
             });
 
             return 'SUCCESS';
@@ -175,7 +175,7 @@ class AuthController extends GetxController {
             return 'FAILED: $e';
           }
         },
-        error: (error) {
+        error: (error, {int? statusCode}) {
           return 'FAILED: $error';
         },
       );
@@ -208,8 +208,7 @@ class AuthController extends GetxController {
 
       // 🔄 Stop FCM token refresh listener and cleanup (BEFORE clearing token)
       _deviceService.stopTokenRefreshListener();
-      await _fcmTokenManager.cleanup().catchError((e) {
-      });
+      await _fcmTokenManager.cleanup().catchError((e) {});
 
       // NOW clear tokens and user data
       user.value = null;
@@ -218,13 +217,7 @@ class AuthController extends GetxController {
       await _localAuthService.clear();
 
       // ⚡ Backend logout in background (don't block UI)
-      _jwtAuthService
-          .logout(localOnly: false)
-          .then((_) {
-          })
-          .catchError((e) {
-          });
-
+      _jwtAuthService.logout(localOnly: false).then((_) {}).catchError((e) {});
 
       // Show success message
       Get.snackbar(

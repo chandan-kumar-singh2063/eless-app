@@ -83,12 +83,12 @@ class ApiResult<T> {
   /// Execute different callbacks based on success/error
   R when<R>({
     required R Function(T data) success,
-    required R Function(String error) error,
+    required R Function(String error, {int? statusCode}) error,
   }) {
     if (isSuccess) {
       return success(data as T);
     } else {
-      return error(this.error ?? 'Unknown error');
+      return error(this.error ?? 'Unknown error', statusCode: statusCode);
     }
   }
 }

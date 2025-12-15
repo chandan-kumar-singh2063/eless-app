@@ -31,7 +31,6 @@ class JwtAuthService {
   /// 4. Store tokens securely
   Future<ApiResult<JwtToken>> loginWithQR(String uniqueId) async {
     try {
-
       // Get or generate device ID for binding
       String deviceId = _storage.getDeviceId() ?? _uuid.v4();
       await _storage.saveDeviceId(deviceId);
@@ -46,8 +45,7 @@ class JwtAuthService {
         // Generate new valid UUID and save it
         deviceId = _uuid.v4();
         await _storage.saveDeviceId(deviceId);
-      } else {
-      }
+      } else {}
 
       // Get platform and device name
       String platform = Platform.operatingSystem.toLowerCase();
@@ -63,9 +61,7 @@ class JwtAuthService {
           platform = 'ios';
           deviceName = '${iosInfo.name} ${iosInfo.model}';
         }
-      } catch (e) {
-      }
-
+      } catch (e) {}
 
       // Prepare request body
       final requestBody = {
@@ -74,7 +70,6 @@ class JwtAuthService {
         'platform': platform,
         'device_name': deviceName,
       };
-
 
       // Send POST request to Django backend
       final response = await _apiClient.post(
@@ -86,7 +81,6 @@ class JwtAuthService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-
         final token = JwtToken.fromJson(data);
 
         // Store access token in memory (ApiClient)
@@ -94,7 +88,6 @@ class JwtAuthService {
 
         // Store refresh token in encrypted Hive
         await _storage.saveRefreshToken(token.refreshToken);
-
 
         return ApiResult.success(token);
       } else {
@@ -116,7 +109,6 @@ class JwtAuthService {
         return ApiResult.error('No refresh token available');
       }
 
-
       final response = await _apiClient.post(
         '/api/auth/token/refresh/',
         body: {'refresh': refreshToken},
@@ -131,8 +123,8 @@ class JwtAuthService {
 
         return ApiResult.success(newAccessToken);
       } else {
-
-        // Clear tokens if refresh failed (likely expired/invalid)
+        // Clear tokens if refresh failed with 401 (expired/invalid)
+        // But DON'T clear on network errors
         if (response.statusCode == 401) {
           await logout(localOnly: true);
         }
@@ -143,6 +135,7 @@ class JwtAuthService {
         );
       }
     } catch (e) {
+      // Network error - DON'T include status code so user stays logged in
       return ApiResult.error('Network error: ${e.toString()}');
     }
   }
@@ -159,7 +152,6 @@ class JwtAuthService {
         final deviceId = _storage.getDeviceId();
 
         if (refreshToken != null && refreshToken.isNotEmpty) {
-
           try {
             // Send both refresh token and device_id to backend
             // This allows backend to:
@@ -184,10 +176,8 @@ class JwtAuthService {
           } catch (e) {
             // Continue with local logout anyway
           }
-        } else {
-        }
-      } else {
-      }
+        } else {}
+      } else {}
 
       // Always clear local storage (even if backend request failed)
       await _storage.clearAll();
@@ -216,6 +206,7 @@ class JwtAuthService {
 
   /// Restore session from stored refresh token
   /// Call this on app startup to restore authentication state
+  /// CRITICAL: Only clears tokens if they're INVALID (401), not on network errors
   Future<ApiResult<bool>> restoreSession() async {
     try {
       final refreshToken = _storage.getRefreshToken();
@@ -224,22 +215,33 @@ class JwtAuthService {
         return ApiResult.success(false);
       }
 
-
-      // Try to get new access token
+      // User has refresh token - they're logged in
+      // Try to get new access token (but don't fail if offline)
       final result = await refreshAccessToken();
 
       return result.when(
         success: (_) {
           return ApiResult.success(true);
         },
-        error: (error) async {
-          // Clear invalid tokens
-          await _storage.clearAll();
-          return ApiResult.success(false);
+        error: (error, {int? statusCode}) async {
+          // ONLY clear tokens if they're invalid (401 = expired/blacklisted)
+          // Network errors (no status code) should NOT log user out
+          if (statusCode == 401) {
+            // Token is invalid/expired - clear and force re-login
+            await _storage.clearAll();
+            return ApiResult.success(false);
+          } else {
+            // Network error or other issue - keep user logged in
+            // They can use cached data and will auto-refresh when online
+            return ApiResult.success(true);
+          }
         },
       );
     } catch (e) {
-      return ApiResult.success(false);
+      // Network exception - keep user logged in with cached data
+      // They have valid refresh token, just no connectivity
+      final hasRefreshToken = _storage.getRefreshToken() != null;
+      return ApiResult.success(hasRefreshToken);
     }
   }
 
