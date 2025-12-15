@@ -49,10 +49,23 @@ class EventController extends GetxController {
   final RemoteAllEventsService _remoteAllEventsService =
       RemoteAllEventsService();
 
+  // ⚡ Performance: In-memory cache to avoid repeated Hive reads
+  List<Event>? _cachedOngoing;
+  List<Event>? _cachedUpcoming;
+  List<Event>? _cachedPast;
+
   @override
   void onInit() {
     super.onInit();
     _initialize();
+  }
+
+  @override
+  void onClose() {
+    _cachedOngoing = null;
+    _cachedUpcoming = null;
+    _cachedPast = null;
+    super.onClose();
   }
 
   Future<void> _initialize() async {
@@ -123,18 +136,26 @@ class EventController extends GetxController {
           ongoingEventList.assignAll(ongoing);
           upcomingEventList.assignAll(upcoming);
           pastEventList.assignAll(past);
+
+          // ⚡ Update memory cache immediately
+          _cachedOngoing = List.from(ongoingEventList);
+          _cachedUpcoming = List.from(upcomingEventList);
+          _cachedPast = List.from(pastEventList);
+
+          // ⚡ Batch write to Hive (only on refresh, not on pagination)
+          _localEventService.assignAllOngoingEvents(events: ongoingEventList);
+          _localEventService.assignAllUpcomingEvents(events: upcomingEventList);
+          _localEventService.assignAllPastEvents(events: pastEventList);
         } else {
           // Append data (pagination)
           ongoingEventList.addAll(ongoing);
           upcomingEventList.addAll(upcoming);
           pastEventList.addAll(past);
-        }
 
-        // Save to local storage
-        if (isRefresh) {
-          _localEventService.assignAllOngoingEvents(events: ongoingEventList);
-          _localEventService.assignAllUpcomingEvents(events: upcomingEventList);
-          _localEventService.assignAllPastEvents(events: pastEventList);
+          // ⚡ Update memory cache without disk write (save I/O)
+          _cachedOngoing = List.from(ongoingEventList);
+          _cachedUpcoming = List.from(upcomingEventList);
+          _cachedPast = List.from(pastEventList);
         }
 
         // Combine all events
@@ -155,15 +176,31 @@ class EventController extends GetxController {
   }
 
   void _loadCachedEvents() {
-    if (_localEventService.getOngoingEvents().isNotEmpty) {
-      ongoingEventList.assignAll(_localEventService.getOngoingEvents());
+    // ⚡ Load from memory cache first (instant)
+    if (_cachedOngoing != null && _cachedOngoing!.isNotEmpty) {
+      ongoingEventList.assignAll(_cachedOngoing!);
+    } else if (_localEventService.getOngoingEvents().isNotEmpty) {
+      final events = _localEventService.getOngoingEvents();
+      _cachedOngoing = events;
+      ongoingEventList.assignAll(events);
     }
-    if (_localEventService.getUpcomingEvents().isNotEmpty) {
-      upcomingEventList.assignAll(_localEventService.getUpcomingEvents());
+
+    if (_cachedUpcoming != null && _cachedUpcoming!.isNotEmpty) {
+      upcomingEventList.assignAll(_cachedUpcoming!);
+    } else if (_localEventService.getUpcomingEvents().isNotEmpty) {
+      final events = _localEventService.getUpcomingEvents();
+      _cachedUpcoming = events;
+      upcomingEventList.assignAll(events);
     }
-    if (_localEventService.getPastEvents().isNotEmpty) {
-      pastEventList.assignAll(_localEventService.getPastEvents());
+
+    if (_cachedPast != null && _cachedPast!.isNotEmpty) {
+      pastEventList.assignAll(_cachedPast!);
+    } else if (_localEventService.getPastEvents().isNotEmpty) {
+      final events = _localEventService.getPastEvents();
+      _cachedPast = events;
+      pastEventList.assignAll(events);
     }
+
     _combineAllEvents();
   }
 

@@ -15,6 +15,7 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   late ScrollController _scrollController;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -31,10 +32,21 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   void _onScroll() {
+    // Guard 1: Prevent duplicate calls while loading
+    if (_isLoadingMore) return;
+
+    // Guard 2: Check if more data available before calculating position
+    if (!eventController.hasMoreData.value) return;
+
+    // Guard 3: Only trigger when close to bottom
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
-      // Load more when user is 300px from the bottom
-      eventController.loadMoreAllEvents();
+      _isLoadingMore = true;
+      eventController.loadMoreAllEvents().then((_) {
+        if (mounted) {
+          _isLoadingMore = false;
+        }
+      });
     }
   }
 
@@ -52,33 +64,48 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 },
                 color: AppTheme.lightPrimaryColor,
                 child: Obx(() {
+                  final controller = eventController;
+
                   // Show shimmer loading during initial load
-                  if (eventController.isAllEventsLoading.value &&
-                      eventController.filteredEventsList.isEmpty) {
+                  if (controller.isAllEventsLoading.value &&
+                      controller.filteredEventsList.isEmpty) {
                     return ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: 6,
                       itemBuilder: (context, index) =>
                           const ExploreEventLoadingCard(),
                     );
-                  } else if (eventController.filteredEventsList.isNotEmpty) {
-                    // Show events with pagination
-                    return ListView.builder(
-                      controller: _scrollController,
-                      physics: const BouncingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
+                  }
+
+                  if (controller.filteredEventsList.isEmpty) {
+                    return _buildEmptyState(context);
+                  }
+
+                  // ⚡ Optimized: Use CustomScrollView with SliverList
+                  return CustomScrollView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    cacheExtent: 500, // Preload 500px for smooth scrolling
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            return ExploreEventCard(
+                              event: controller.filteredEventsList[index],
+                            );
+                          },
+                          childCount: controller.filteredEventsList.length,
+                          addAutomaticKeepAlives: false, // Save memory
+                          addRepaintBoundaries: true,
+                        ),
                       ),
-                      itemCount:
-                          eventController.filteredEventsList.length +
-                          (eventController.hasMoreData.value ? 1 : 0),
-                      addAutomaticKeepAlives: true,
-                      addRepaintBoundaries: true,
-                      itemBuilder: (context, index) {
-                        // Show loading indicator at the bottom
-                        if (index ==
-                            eventController.filteredEventsList.length) {
-                          return Obx(
-                            () => eventController.isLoadingMore.value
+                      // Loading indicator as separate sliver
+                      if (controller.hasMoreData.value)
+                        SliverToBoxAdapter(
+                          child: Obx(
+                            () => controller.isLoadingMore.value
                                 ? Padding(
                                     padding: const EdgeInsets.all(16.0),
                                     child: Center(
@@ -87,28 +114,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                       ),
                                     ),
                                   )
-                                : const SizedBox.shrink(),
-                          );
-                        }
-
-                        return ExploreEventCard(
-                          key: ValueKey(
-                            eventController.filteredEventsList[index].id,
+                                : const SizedBox(height: 20),
                           ),
-                          event: eventController.filteredEventsList[index],
-                        );
-                      },
-                    );
-                  } else {
-                    // Show empty state
-                    return SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: SizedBox(
-                        height: MediaQuery.of(context).size.height - 200,
-                        child: _buildEmptyState(),
-                      ),
-                    );
-                  }
+                        ),
+                    ],
+                  );
                 }),
               ),
             ),
@@ -118,30 +128,36 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No events available',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.lightTextColor,
-              ),
+  Widget _buildEmptyState(BuildContext context) {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height - 200,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text(
+                  'No events available',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.lightTextColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Check back later for new events',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Check back later for new events',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
       ),
     );

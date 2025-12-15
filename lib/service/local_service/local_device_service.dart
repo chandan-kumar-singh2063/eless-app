@@ -31,6 +31,19 @@ class LocalDeviceService {
     }
   }
 
+  Future<void> appendDevices({required List<Device> devices}) async {
+    if (!_isInitialized) {
+      log('⚠️ Skipping device append to Hive (not initialized)');
+      return;
+    }
+    try {
+      // Append new devices without clearing existing ones
+      await _deviceBox.addAll(devices);
+    } catch (e) {
+      log('❌ Error appending devices: $e');
+    }
+  }
+
   List<Device> getDevices() {
     if (!_isInitialized) return [];
     try {

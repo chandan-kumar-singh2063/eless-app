@@ -12,15 +12,23 @@ class DevicesController extends GetxController {
   RxBool isLoadingMore = false.obs;
   RxBool hasMoreData = true.obs;
   int currentPage = 1;
-  final int pageSize =
-      40; // Load ALL devices at once - 40 devices is small dataset
+  final int pageSize = 12; // Load 12 devices at a time (like events use 10)
 
   final LocalDeviceService _localDeviceService = LocalDeviceService();
+
+  // ⚡ Performance: In-memory cache to avoid repeated Hive reads
+  List<Device>? _cachedDevices;
 
   @override
   void onInit() {
     super.onInit();
     _initialize();
+  }
+
+  @override
+  void onClose() {
+    _cachedDevices = null;
+    super.onClose();
   }
 
   Future<void> _initialize() async {
@@ -34,54 +42,95 @@ class DevicesController extends GetxController {
   }
 
   void _loadCachedDevices() {
-    if (_localDeviceService.getDevices().isNotEmpty) {
-      final devices = _localDeviceService.getDevices();
-      // Sort only once when loading from cache
-      devices.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
-      deviceList.assignAll(devices);
+    // ⚡ Load from memory cache first (instant)
+    if (_cachedDevices != null && _cachedDevices!.isNotEmpty) {
+      deviceList.assignAll(_cachedDevices!);
+    } else {
+      final cached = _localDeviceService.getDevices();
+      if (cached.isNotEmpty) {
+        _cachedDevices = cached;
+        deviceList.assignAll(cached);
+      }
     }
   }
 
-  // Initial load - loads ALL devices (40 devices is small dataset)
+  // Initial load - gets first page only
   Future<void> getDevicesFirstPage() async {
     try {
       isDeviceLoading(true);
       currentPage = 1;
+      hasMoreData.value = true;
 
-      // Call API for all devices at once (page_size=40)
+      // Load from cache first (instant UI)
+      _loadCachedDevices();
+
+      // Fetch first page from API
+      await _fetchDevicesPage(page: 1, isRefresh: true);
+    } finally {
+      isDeviceLoading(false);
+    }
+  }
+
+  // Load more devices (pagination)
+  Future<void> loadMoreDevices() async {
+    if (isLoadingMore.value || !hasMoreData.value) return;
+
+    try {
+      isLoadingMore(true);
+      currentPage++;
+      await _fetchDevicesPage(page: currentPage, isRefresh: false);
+    } finally {
+      isLoadingMore(false);
+    }
+  }
+
+  Future<void> _fetchDevicesPage({
+    required int page,
+    required bool isRefresh,
+  }) async {
+    try {
       var result = await RemoteDeviceService().getPaginated(
-        page: 1,
+        page: page,
         pageSize: pageSize,
       );
 
       if (result['devices'] != null) {
         final devices = result['devices'] as List<Device>;
 
-        // Sort once before saving
+        // Check if we got less data than page size (last page)
+        if (devices.length < pageSize) {
+          hasMoreData.value = false;
+        }
+
+        // Sort alphabetically (A-Z)
         devices.sort(
           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         );
 
-        // Update UI and cache
-        deviceList.assignAll(devices);
-        _localDeviceService.assignAllDevices(devices: devices);
+        if (isRefresh) {
+          // Replace all data (refresh)
+          deviceList.assignAll(devices);
 
-        // No pagination needed for 40 devices
-        hasMoreData.value = false;
+          // ⚡ Update memory cache immediately
+          _cachedDevices = List.from(deviceList);
+
+          // ⚡ Batch write to Hive (only on refresh)
+          _localDeviceService.assignAllDevices(devices: devices);
+        } else {
+          // Append data (pagination)
+          deviceList.addAll(devices);
+
+          // ⚡ Update memory cache without disk write (save I/O)
+          _cachedDevices = List.from(deviceList);
+        }
       }
     } catch (e) {
-      // Keep showing cached data on error
-    } finally {
-      isDeviceLoading(false);
+      // Error handling
+      if (page == 1) {
+        // First page error - show cached data
+        _loadCachedDevices();
+      }
     }
-  }
-
-  // Pagination not needed - 40 devices loads instantly
-  Future<void> loadMoreDevices() async {
-    // No-op: All devices loaded on first page
-    return;
   }
 
   // Fetch fresh devices from API (called on pull-to-refresh)
