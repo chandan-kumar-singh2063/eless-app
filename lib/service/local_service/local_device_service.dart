@@ -8,9 +8,10 @@ class LocalDeviceService {
 
   Future<void> init() async {
     try {
-      _deviceBox = await Hive.openBox<Device>('Devices');
+      // ⚡ Use already-opened box from AppInitializer (don't open again)
+      _deviceBox = Hive.box<Device>('Devices');
       _isInitialized = true;
-      log('✅ LocalDeviceService initialized');
+      log('✅ LocalDeviceService initialized (using pre-opened box)');
     } catch (e) {
       log('❌ Error init LocalDeviceService: $e');
       _isInitialized = false;
