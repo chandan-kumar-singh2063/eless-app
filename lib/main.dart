@@ -240,32 +240,27 @@ void main() async {
   // Initialize AuthController and WAIT for it to complete
   final authController = Get.put(AuthController(), permanent: true);
 
-  // Wait for AuthController to finish async initialization
-  while (!authController.isInitialized.value) {
-    await Future.delayed(const Duration(milliseconds: 50));
+  // ⚡ FIX: Wait for auth initialization without blocking
+  if (!authController.isInitialized.value) {
+    await Future.doWhile(() async {
+      await Future.delayed(const Duration(milliseconds: 100));
+      return !authController.isInitialized.value;
+    });
   }
   log('✅ AuthController initialized');
 
+  // ⚡ FIX: Initialize only essential controllers (lazy load others)
   Get.put(DashboardController());
   log('✅ DashboardController initialized');
 
-  Get.put(HomeController());
-  log('✅ HomeController initialized');
-
-  Get.put(DevicesController());
-  log('✅ DevicesController initialized');
-
-  Get.put(ExploreController());
-  log('✅ ExploreController initialized');
-
-  Get.put(EventController());
-  log('✅ EventController initialized');
-
-  Get.put(NotificationController());
-  log('✅ NotificationController initialized');
-
-  Get.put(CartController());
-  log('✅ CartController initialized');
+  // ⚡ FIX: Register controllers with lazy loading - they initialize on first use
+  Get.lazyPut(() => HomeController(), fenix: true);
+  Get.lazyPut(() => DevicesController(), fenix: true);
+  Get.lazyPut(() => ExploreController(), fenix: true);
+  Get.lazyPut(() => EventController(), fenix: true);
+  Get.lazyPut(() => NotificationController(), fenix: true);
+  Get.lazyPut(() => CartController(), fenix: true);
+  log('✅ Controllers registered (lazy load)');
 
   // Initialize FCM Token Manager and start background registration
   // This happens AFTER all controllers are ready
