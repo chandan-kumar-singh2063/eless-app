@@ -166,7 +166,6 @@ class ApiClientV2 {
 
       // Handle 401 - trigger refresh
       if (response.statusCode == 401 && requiresAuth && retryCount == 0) {
-
         final refreshed = await _refreshTokenWithQueue();
 
         if (refreshed) {
@@ -234,7 +233,6 @@ class ApiClientV2 {
         return false;
       }
 
-
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/auth/token/refresh/'),
@@ -261,10 +259,11 @@ class ApiClientV2 {
         await _processQueuedRequests();
 
         return true;
-      } else {
+      } else if (response.statusCode == 401) {
+        // 401 = refresh token is invalid/expired - this is a REAL failure
         _refreshFailureCount++;
 
-        // Only trigger logout after 3 consecutive failures
+        // Only trigger logout after 3 consecutive 401 failures
         if (_refreshFailureCount >= 3) {
           await _storage.clearAll();
           clearAccessToken();
@@ -276,9 +275,16 @@ class ApiClientV2 {
 
         _refreshLock!.complete(false);
         return false;
+      } else {
+        // Other status codes (500, 503, etc.) - server error, not auth failure
+        // Don't increment failure count - user's token might still be valid
+        _refreshLock!.complete(false);
+        return false;
       }
     } catch (e) {
-      _refreshFailureCount++;
+      // Network error (offline, timeout, etc.) - NOT an auth failure
+      // Don't increment failure count - keep user logged in
+      // They can continue using cached data
 
       if (_refreshLock != null && !_refreshLock!.isCompleted) {
         _refreshLock!.complete(false);
@@ -303,7 +309,6 @@ class ApiClientV2 {
   Future<void> _processQueuedRequests() async {
     if (_requestQueue.isEmpty) return;
 
-
     // Process all queued requests
     final requests = List<_QueuedRequest>.from(_requestQueue);
     _requestQueue.clear();
@@ -315,8 +320,7 @@ class ApiClientV2 {
           requiresAuth: queuedRequest.requiresAuth,
           retryCount: 1,
         );
-      } catch (e) {
-      }
+      } catch (e) {}
     }
   }
 
@@ -329,15 +333,13 @@ class ApiClientV2 {
 
     if (requiresAuth && hasAccessToken) {
       headers['Authorization'] = 'Bearer $_accessToken';
-    } else if (requiresAuth && !hasAccessToken) {
-    }
+    } else if (requiresAuth && !hasAccessToken) {}
 
     return headers;
   }
 
   /// Cancel all pending requests (called on logout)
   void cancelPendingRequests() {
-
     // Complete all pending requests with cancellation error
     for (final request in _requestQueue) {
       if (!request.completer.isCompleted) {

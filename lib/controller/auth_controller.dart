@@ -68,10 +68,18 @@ class AuthController extends GetxController {
   }
 
   /// Load stored session
+  /// CORRECT BEHAVIOR: Just check if tokens exist, don't try to refresh
   Future<void> _loadStoredSession() async {
     try {
       await checkExistingUser();
-      await restoreJwtSession();
+      // DON'T call restoreJwtSession() here!
+      // Just check if user and refresh token exist = logged in
+      // Access token will be refreshed automatically when needed (on 401)
+
+      // If user is logged in, flush offline queue
+      if (isLoggedIn) {
+        await _deviceService.flushOfflineQueue();
+      }
     } catch (e) {}
   }
 
