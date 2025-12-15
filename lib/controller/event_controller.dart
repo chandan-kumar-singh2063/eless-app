@@ -60,6 +60,10 @@ class EventController extends GetxController {
   DateTime? _lastFetchPast;
   final CancelToken _cancelToken = CancelToken(); // ⚡ Cancel pending requests
 
+  // ⚡ Cache sorted results to prevent re-sorting on every Obx rebuild
+  List<Event>? _cachedSortedAll;
+  int _lastSortedHash = 0; // Track if event lists changed
+
   @override
   void onInit() {
     super.onInit();
@@ -75,6 +79,7 @@ class EventController extends GetxController {
     _lastFetchOngoing = null;
     _lastFetchUpcoming = null;
     _lastFetchPast = null;
+    _cachedSortedAll = null; // Clear sorted cache
     super.onClose();
   }
 
@@ -263,6 +268,18 @@ class EventController extends GetxController {
   }
 
   void _combineAllEvents() {
+    // ⚡ Calculate hash of event lists to detect changes
+    final currentHash =
+        ongoingEventList.length * 1000 +
+        upcomingEventList.length * 100 +
+        pastEventList.length;
+
+    // ⚡ Return cached sorted list if events haven't changed
+    if (_cachedSortedAll != null && currentHash == _lastSortedHash) {
+      allEventsList.assignAll(_cachedSortedAll!);
+      return;
+    }
+
     List<Event> combined = [];
     combined.addAll(ongoingEventList);
     combined.addAll(upcomingEventList);
@@ -286,6 +303,10 @@ class EventController extends GetxController {
         return b.date.compareTo(a.date);
       }
     });
+
+    // ⚡ Cache the sorted result
+    _cachedSortedAll = combined;
+    _lastSortedHash = currentHash;
 
     allEventsList.assignAll(combined);
     filteredEventsList.assignAll(combined);

@@ -15,6 +15,7 @@ import 'package:eless/const.dart';
 /// ✅ Auto-force logout on repeated failures
 /// ✅ Handles logout during active refresh
 /// ✅ Request queuing during refresh
+/// ⚡ In-memory response caching (prevents duplicate requests)
 class ApiClientV2 {
   static final ApiClientV2 _instance = ApiClientV2._internal();
   factory ApiClientV2() => _instance;
@@ -32,6 +33,10 @@ class ApiClientV2 {
   bool _isRefreshing = false;
   int _refreshFailureCount = 0;
   static const int _maxRefreshFailures = 3;
+
+  // ⚡ Response cache to prevent duplicate API calls
+  final Map<String, _CachedResponse> _responseCache = {};
+  static const Duration _cacheDuration = Duration(seconds: 5);
 
   // Callbacks
   Function()? onUnauthorized;
@@ -60,19 +65,58 @@ class ApiClientV2 {
   /// Check if authenticated
   bool get hasAccessToken => _accessToken != null && _accessToken!.isNotEmpty;
 
+  /// ⚡ Clear response cache (call on logout or manual refresh)
+  void clearCache() {
+    _responseCache.clear();
+  }
+
+  /// ⚡ Check if response is cached and fresh
+  http.Response? _getCachedResponse(String endpoint) {
+    final cached = _responseCache[endpoint];
+    if (cached != null &&
+        DateTime.now().difference(cached.timestamp) < _cacheDuration) {
+      return cached.response;
+    }
+    _responseCache.remove(endpoint); // Remove stale cache
+    return null;
+  }
+
+  /// ⚡ Cache response for GET requests only
+  void _cacheResponse(String endpoint, http.Response response) {
+    if (response.statusCode == 200) {
+      _responseCache[endpoint] = _CachedResponse(response, DateTime.now());
+    }
+  }
+
   /// GET request
   Future<http.Response> get(
     String endpoint, {
     Map<String, String>? headers,
     bool requiresAuth = true,
+    bool useCache = true, // ⚡ Enable caching by default for GET
   }) async {
-    return _makeRequest(
+    // ⚡ Return cached response if available and fresh
+    if (useCache) {
+      final cached = _getCachedResponse(endpoint);
+      if (cached != null) {
+        return cached;
+      }
+    }
+
+    final response = await _makeRequest(
       () => _client.get(
         Uri.parse('$baseUrl$endpoint'),
         headers: _buildHeaders(headers, requiresAuth),
       ),
       requiresAuth: requiresAuth,
     );
+
+    // ⚡ Cache successful GET responses
+    if (useCache && response.statusCode == 200) {
+      _cacheResponse(endpoint, response);
+    }
+
+    return response;
   }
 
   /// POST request
@@ -359,6 +403,9 @@ class ApiClientV2 {
 
     _isRefreshing = false;
     _refreshFailureCount = 0;
+
+    // ⚡ Clear cache on logout
+    clearCache();
   }
 
   /// Clean up resources
@@ -376,4 +423,12 @@ class _QueuedRequest {
 
   _QueuedRequest(this.request, this.requiresAuth)
     : completer = Completer<http.Response>();
+}
+
+/// ⚡ Cached response with timestamp for freshness check
+class _CachedResponse {
+  final http.Response response;
+  final DateTime timestamp;
+
+  _CachedResponse(this.response, this.timestamp);
 }

@@ -20,6 +20,7 @@ import 'package:eless/controller/event_controller.dart';
 import 'package:eless/controller/notification_controller.dart';
 import 'package:eless/controller/cart_controller.dart';
 import 'package:eless/service/fcm_token_manager.dart';
+import 'package:eless/service/connectivity_service.dart';
 import 'package:eless/model/ad_banner.dart';
 import 'package:eless/model/category.dart';
 import 'package:eless/model/user.dart';
@@ -231,6 +232,24 @@ void main() async {
     log('Adapters already registered: $e');
   }
 
+  // ⚡ OPTIMIZATION: Pre-open all Hive boxes ONCE at startup
+  // This prevents duplicate box opens in each service
+  log('📦 Pre-opening Hive boxes...');
+  await Future.wait([
+    Hive.openBox<Device>('Devices'),
+    Hive.openBox<Event>('OngoingEvents'),
+    Hive.openBox<Event>('UpcomingEvents'),
+    Hive.openBox<Event>('PastEvents'),
+    Hive.openBox<NotificationModel>('notifications'),
+    Hive.openBox<Category>('categories'),
+    Hive.openBox<AdBanner>('AdBanners'),
+    Hive.openBox('banner_metadata'),
+    Hive.openBox('badge_storage'),
+    Hive.openBox<String>('token'),
+    Hive.openBox<User>('user'),
+  ]);
+  log('✅ All Hive boxes opened');
+
   // Configure EasyLoading
   configLoading();
 
@@ -268,6 +287,11 @@ void main() async {
   await fcmTokenManager.init();
   log('✅ FCM Token Manager initialized');
 
+  // ⚡ Initialize connectivity monitoring for auto-refresh
+  final connectivityService = ConnectivityService();
+  await connectivityService.init();
+  log('✅ Connectivity monitoring started');
+
   // If user is logged in, register FCM token in background
   if (authController.isLoggedIn &&
       authController.userUniqueId.value.isNotEmpty) {
@@ -281,6 +305,37 @@ void main() async {
     });
     log('🔔 FCM token registration scheduled (3s delay)');
   }
+
+  // ⚡ CRITICAL: Setup FCM Foreground Handler (when app is open)
+  // Without this, notifications don't show/update badge when app is active
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    log('📬 Foreground FCM message: ${message.messageId}');
+
+    final notification = message.notification;
+    final data = message.data;
+
+    final String title = notification?.title ?? data['title'] ?? 'Notification';
+    final String body = notification?.body ?? data['body'] ?? '';
+    final String? imageUrl = notification?.android?.imageUrl ?? data['image'];
+
+    log('  Title: $title');
+    log('  Body: $body');
+    log('  Data: ${message.data}');
+
+    // Show local notification even when app is open
+    _showBackgroundNotification(title, body, imageUrl, data);
+
+    // Update notification controller badge count if available
+    try {
+      if (Get.isRegistered<NotificationController>()) {
+        final notifController = Get.find<NotificationController>();
+        notifController.getNotificationsFirstPage(); // Refresh to update badge
+      }
+    } catch (e) {
+      log('⚠️ Could not update notification badge: $e');
+    }
+  });
+  log('✅ FCM foreground handler registered');
 
   log('✅ All initialization complete - launching app');
 
