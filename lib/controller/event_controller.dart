@@ -173,8 +173,24 @@ class EventController extends GetxController {
     combined.addAll(upcomingEventList);
     combined.addAll(pastEventList);
 
-    // Sort by date (newest first)
-    combined.sort((a, b) => b.date.compareTo(a.date));
+    // Sort by date (newest first) - Latest dates at top, past dates at bottom
+    // Parse date strings to DateTime for proper date comparison
+    combined.sort((a, b) {
+      try {
+        // Try to parse dates as DateTime objects for proper comparison
+        final dateA = DateTime.parse(a.date);
+        final dateB = DateTime.parse(b.date);
+
+        // Compare: newest first (descending order)
+        // Returns negative if dateB is before dateA (b should come before a)
+        // Returns positive if dateB is after dateA (a should come before b)
+        return dateB.compareTo(dateA);
+      } catch (e) {
+        // If date parsing fails, fall back to string comparison
+        // This handles cases where date format might be different
+        return b.date.compareTo(a.date);
+      }
+    });
 
     allEventsList.assignAll(combined);
     filteredEventsList.assignAll(combined);
