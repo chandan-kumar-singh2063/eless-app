@@ -25,7 +25,9 @@ class LocalDeviceService {
     }
     try {
       await _deviceBox.clear();
-      await _deviceBox.addAll(devices);
+      // ⚡ Cache limit: Keep only latest 100 devices to prevent Hive bloat
+      final limitedDevices = devices.take(100).toList();
+      await _deviceBox.addAll(limitedDevices);
     } catch (e) {
       log('❌ Error saving devices: $e');
     }

@@ -18,17 +18,23 @@ class LocalEventService {
 
   Future<void> assignAllOngoingEvents({required List<Event> events}) async {
     await _ongoingEventBox.clear();
-    await _ongoingEventBox.addAll(events);
+    // ⚡ Cache limit: Keep only latest 50 events per category to prevent Hive bloat
+    final limitedEvents = events.take(50).toList();
+    await _ongoingEventBox.addAll(limitedEvents);
   }
 
   Future<void> assignAllUpcomingEvents({required List<Event> events}) async {
     await _upcomingEventBox.clear();
-    await _upcomingEventBox.addAll(events);
+    // ⚡ Cache limit: Keep only latest 50 events per category
+    final limitedEvents = events.take(50).toList();
+    await _upcomingEventBox.addAll(limitedEvents);
   }
 
   Future<void> assignAllPastEvents({required List<Event> events}) async {
     await _pastEventBox.clear();
-    await _pastEventBox.addAll(events);
+    // ⚡ Cache limit: Keep only latest 50 events per category
+    final limitedEvents = events.take(50).toList();
+    await _pastEventBox.addAll(limitedEvents);
   }
 
   List<Event> getOngoingEvents() => _ongoingEventBox.values.toList();

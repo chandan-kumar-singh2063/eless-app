@@ -17,7 +17,11 @@ class LocalNotificationService {
     required List<NotificationModel> notifications,
   }) async {
     await _notificationBox.clear();
-    await _notificationBox.addAll(notifications);
+    // ⚡ Cache limit: Keep only latest 100 notifications to prevent Hive bloat
+    final sortedNotifications = notifications
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final limitedNotifications = sortedNotifications.take(100).toList();
+    await _notificationBox.addAll(limitedNotifications);
   }
 
   List<NotificationModel> getNotifications() => _notificationBox.values.toList()

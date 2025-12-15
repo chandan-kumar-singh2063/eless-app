@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:eless/model/event.dart';
+import 'package:eless/model/cancel_token.dart';
 import 'package:eless/service/local_service/local_event_service.dart';
 import 'package:eless/service/local_service/local_badge_service.dart';
 import 'package:eless/service/remote_service/remote_ongoing_event_service.dart';
@@ -54,6 +55,10 @@ class EventController extends GetxController {
   List<Event>? _cachedOngoing;
   List<Event>? _cachedUpcoming;
   List<Event>? _cachedPast;
+  DateTime? _lastFetchOngoing;
+  DateTime? _lastFetchUpcoming;
+  DateTime? _lastFetchPast;
+  final CancelToken _cancelToken = CancelToken(); // ⚡ Cancel pending requests
 
   @override
   void onInit() {
@@ -63,9 +68,13 @@ class EventController extends GetxController {
 
   @override
   void onClose() {
+    _cancelToken.cancel(); // ⚡ Cancel any pending requests
     _cachedOngoing = null;
     _cachedUpcoming = null;
     _cachedPast = null;
+    _lastFetchOngoing = null;
+    _lastFetchUpcoming = null;
+    _lastFetchPast = null;
     super.onClose();
   }
 
@@ -190,28 +199,63 @@ class EventController extends GetxController {
   }
 
   void _loadCachedEvents() {
-    // ⚡ Load from memory cache first (instant)
-    if (_cachedOngoing != null && _cachedOngoing!.isNotEmpty) {
-      ongoingEventList.assignAll(_cachedOngoing!);
+    // ⚡ Load ongoing events with TTL
+    if (_cachedOngoing != null && _lastFetchOngoing != null) {
+      final cacheAge = DateTime.now().difference(_lastFetchOngoing!);
+      if (cacheAge.inMinutes < 5) {
+        ongoingEventList.assignAll(_cachedOngoing!);
+      } else {
+        final events = _localEventService.getOngoingEvents();
+        if (events.isNotEmpty) {
+          _cachedOngoing = events;
+          _lastFetchOngoing = DateTime.now();
+          ongoingEventList.assignAll(events);
+        }
+      }
     } else if (_localEventService.getOngoingEvents().isNotEmpty) {
       final events = _localEventService.getOngoingEvents();
       _cachedOngoing = events;
+      _lastFetchOngoing = DateTime.now();
       ongoingEventList.assignAll(events);
     }
 
-    if (_cachedUpcoming != null && _cachedUpcoming!.isNotEmpty) {
-      upcomingEventList.assignAll(_cachedUpcoming!);
+    // ⚡ Load upcoming events with TTL
+    if (_cachedUpcoming != null && _lastFetchUpcoming != null) {
+      final cacheAge = DateTime.now().difference(_lastFetchUpcoming!);
+      if (cacheAge.inMinutes < 5) {
+        upcomingEventList.assignAll(_cachedUpcoming!);
+      } else {
+        final events = _localEventService.getUpcomingEvents();
+        if (events.isNotEmpty) {
+          _cachedUpcoming = events;
+          _lastFetchUpcoming = DateTime.now();
+          upcomingEventList.assignAll(events);
+        }
+      }
     } else if (_localEventService.getUpcomingEvents().isNotEmpty) {
       final events = _localEventService.getUpcomingEvents();
       _cachedUpcoming = events;
+      _lastFetchUpcoming = DateTime.now();
       upcomingEventList.assignAll(events);
     }
 
-    if (_cachedPast != null && _cachedPast!.isNotEmpty) {
-      pastEventList.assignAll(_cachedPast!);
+    // ⚡ Load past events with TTL
+    if (_cachedPast != null && _lastFetchPast != null) {
+      final cacheAge = DateTime.now().difference(_lastFetchPast!);
+      if (cacheAge.inMinutes < 5) {
+        pastEventList.assignAll(_cachedPast!);
+      } else {
+        final events = _localEventService.getPastEvents();
+        if (events.isNotEmpty) {
+          _cachedPast = events;
+          _lastFetchPast = DateTime.now();
+          pastEventList.assignAll(events);
+        }
+      }
     } else if (_localEventService.getPastEvents().isNotEmpty) {
       final events = _localEventService.getPastEvents();
       _cachedPast = events;
+      _lastFetchPast = DateTime.now();
       pastEventList.assignAll(events);
     }
 
@@ -253,10 +297,10 @@ class EventController extends GetxController {
 
     try {
       isLoadingMoreOngoing(true);
-      ongoingPage++;
+      final nextPage = ongoingPage + 1; // Calculate next page
 
       var result = await RemoteOngoingEventService().getPaginated(
-        page: ongoingPage,
+        page: nextPage,
         pageSize: pageSize,
       );
 
@@ -266,11 +310,12 @@ class EventController extends GetxController {
           hasMoreOngoing.value = false;
         }
         ongoingEventList.addAll(newEvents);
+        ongoingPage = nextPage; // ✅ Only increment AFTER successful fetch
       } else {
         hasMoreOngoing.value = false;
       }
     } catch (e) {
-      hasMoreOngoing.value = false;
+      // ⚡ Error: Page stays same, user can retry
     } finally {
       isLoadingMoreOngoing(false);
     }
@@ -282,10 +327,10 @@ class EventController extends GetxController {
 
     try {
       isLoadingMoreUpcoming(true);
-      upcomingPage++;
+      final nextPage = upcomingPage + 1; // Calculate next page
 
       var result = await RemoteUpcomingEventService().getPaginated(
-        page: upcomingPage,
+        page: nextPage,
         pageSize: pageSize,
       );
 
@@ -295,11 +340,12 @@ class EventController extends GetxController {
           hasMoreUpcoming.value = false;
         }
         upcomingEventList.addAll(newEvents);
+        upcomingPage = nextPage; // ✅ Only increment AFTER successful fetch
       } else {
         hasMoreUpcoming.value = false;
       }
     } catch (e) {
-      hasMoreUpcoming.value = false;
+      // ⚡ Error: Page stays same, user can retry
     } finally {
       isLoadingMoreUpcoming(false);
     }
@@ -311,10 +357,10 @@ class EventController extends GetxController {
 
     try {
       isLoadingMorePast(true);
-      pastPage++;
+      final nextPage = pastPage + 1; // Calculate next page
 
       var result = await RemotePastEventService().getPaginated(
-        page: pastPage,
+        page: nextPage,
         pageSize: pageSize,
       );
 
@@ -324,11 +370,12 @@ class EventController extends GetxController {
           hasMorePast.value = false;
         }
         pastEventList.addAll(newEvents);
+        pastPage = nextPage; // ✅ Only increment AFTER successful fetch
       } else {
         hasMorePast.value = false;
       }
     } catch (e) {
-      hasMorePast.value = false;
+      // ⚡ Error: Page stays same, user can retry
     } finally {
       isLoadingMorePast(false);
     }

@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:eless/model/notification.dart';
+import 'package:eless/model/cancel_token.dart';
 import 'package:eless/service/local_service/local_notification_service.dart';
 import 'package:eless/service/remote_service/remote_notification_service.dart';
 
@@ -24,6 +25,8 @@ class NotificationController extends GetxController {
 
   // ⚡ Performance: In-memory cache to avoid repeated Hive reads
   List<NotificationModel>? _cachedNotifications;
+  DateTime? _lastFetch; // ⚡ Cache expiry: refresh every 5 minutes
+  final CancelToken _cancelToken = CancelToken(); // ⚡ Cancel pending requests
   RxBool isRefreshing = false.obs; // Silent background refresh flag
 
   @override
@@ -34,7 +37,9 @@ class NotificationController extends GetxController {
 
   @override
   void onClose() {
+    _cancelToken.cancel(); // ⚡ Cancel any pending requests
     _cachedNotifications = null;
+    _lastFetch = null;
     super.onClose();
   }
 
@@ -54,16 +59,21 @@ class NotificationController extends GetxController {
 
   void _loadCachedNotifications() {
     // ⚡ Load from memory cache first (instant)
-    if (_cachedNotifications != null && _cachedNotifications!.isNotEmpty) {
-      notificationList.assignAll(_cachedNotifications!);
-      _updateUnreadCount();
-    } else {
-      final cached = localNotificationService.getNotifications();
-      if (cached.isNotEmpty) {
-        _cachedNotifications = cached;
-        notificationList.assignAll(cached);
+    if (_cachedNotifications != null && _lastFetch != null) {
+      final cacheAge = DateTime.now().difference(_lastFetch!);
+      if (cacheAge.inMinutes < 5) {
+        notificationList.assignAll(_cachedNotifications!);
         _updateUnreadCount();
+        return;
       }
+    }
+    // ⚡ Fall back to Hive if cache expired
+    final cached = localNotificationService.getNotifications();
+    if (cached.isNotEmpty) {
+      _cachedNotifications = cached;
+      _lastFetch = DateTime.now();
+      notificationList.assignAll(cached);
+      _updateUnreadCount();
     }
   }
 
@@ -109,6 +119,7 @@ class NotificationController extends GetxController {
 
         // ⚡ Update memory cache immediately
         _cachedNotifications = List.from(notifications);
+        _lastFetch = DateTime.now();
 
         notificationList.assignAll(notifications);
         _updateUnreadCount();
@@ -124,42 +135,32 @@ class NotificationController extends GetxController {
 
     try {
       isLoadingMore(true);
-      currentPage++;
+      final nextPage = currentPage + 1; // Calculate next page
 
       var result = await remoteNotificationService.getNotificationsPaginated(
-        page: currentPage,
+        page: nextPage,
         pageSize: pageSize,
       );
 
       if (result != null && result['notifications'] != null) {
-        final newNotifications =
+        final notifications =
             result['notifications'] as List<NotificationModel>;
-        hasMoreData.value = result['has_more'] ?? false;
 
-        // Preserve isClicked state
-        final existingNotifications = localNotificationService
-            .getNotifications();
-        for (var newNotification in newNotifications) {
-          final existing = existingNotifications.firstWhereOrNull(
-            (n) => n.id == newNotification.id,
-          );
-          if (existing != null) {
-            newNotification.isClicked = existing.isClicked;
-          }
+        // Check if last page
+        if (notifications.length < pageSize) {
+          hasMoreData.value = false;
         }
 
-        // Append new notifications
-        notificationList.addAll(newNotifications);
+        notificationList.addAll(notifications);
+        _updateUnreadCount();
 
-        // ⚡ Update memory cache without disk write (save I/O)
+        // ⚡ Update memory cache
         _cachedNotifications = List.from(notificationList);
 
-        _updateUnreadCount();
-      } else {
-        hasMoreData.value = false;
+        currentPage = nextPage; // ✅ Only increment AFTER successful fetch
       }
     } catch (e) {
-      hasMoreData.value = false;
+      // ⚡ Error: Page stays same, user can retry
     } finally {
       isLoadingMore(false);
     }

@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:eless/model/device.dart';
+import 'package:eless/model/cancel_token.dart';
 import 'package:eless/service/local_service/local_device_service.dart';
 import 'package:eless/service/remote_service/remote_device_service.dart';
 
@@ -19,6 +20,8 @@ class DevicesController extends GetxController {
 
   // ⚡ Performance: In-memory cache to avoid repeated Hive reads
   List<Device>? _cachedDevices;
+  DateTime? _lastFetch; // ⚡ Cache expiry: refresh every 5 minutes
+  final CancelToken _cancelToken = CancelToken(); // ⚡ Cancel pending requests
 
   @override
   void onInit() {
@@ -28,7 +31,9 @@ class DevicesController extends GetxController {
 
   @override
   void onClose() {
+    _cancelToken.cancel(); // ⚡ Cancel any pending requests
     _cachedDevices = null;
+    _lastFetch = null;
     super.onClose();
   }
 
@@ -44,14 +49,19 @@ class DevicesController extends GetxController {
 
   void _loadCachedDevices() {
     // ⚡ Load from memory cache first (instant)
-    if (_cachedDevices != null && _cachedDevices!.isNotEmpty) {
-      deviceList.assignAll(_cachedDevices!);
-    } else {
-      final cached = _localDeviceService.getDevices();
-      if (cached.isNotEmpty) {
-        _cachedDevices = cached;
-        deviceList.assignAll(cached);
+    if (_cachedDevices != null && _lastFetch != null) {
+      final cacheAge = DateTime.now().difference(_lastFetch!);
+      if (cacheAge.inMinutes < 5) {
+        deviceList.assignAll(_cachedDevices!);
+        return;
       }
+    }
+    // ⚡ Fall back to Hive if cache expired
+    if (_localDeviceService.getDevices().isNotEmpty) {
+      final devices = _localDeviceService.getDevices();
+      _cachedDevices = devices;
+      _lastFetch = DateTime.now();
+      deviceList.assignAll(devices);
     }
   }
 
@@ -78,8 +88,11 @@ class DevicesController extends GetxController {
 
     try {
       isLoadingMore(true);
-      currentPage++;
-      await _fetchDevicesPage(page: currentPage, isRefresh: false);
+      final nextPage = currentPage + 1; // Calculate next page
+      await _fetchDevicesPage(page: nextPage, isRefresh: false);
+      currentPage = nextPage; // ✅ Only increment AFTER successful fetch
+    } catch (e) {
+      // ⚡ Error: Page stays same, user can retry
     } finally {
       isLoadingMore(false);
     }
@@ -94,6 +107,9 @@ class DevicesController extends GetxController {
         page: page,
         pageSize: pageSize,
       );
+
+      // ⚡ Check if request was cancelled (user navigated away)
+      if (_cancelToken.isCancelled) return;
 
       if (result['devices'] != null) {
         final devices = result['devices'] as List<Device>;
@@ -114,6 +130,7 @@ class DevicesController extends GetxController {
 
           // ⚡ Update memory cache immediately
           _cachedDevices = List.from(deviceList);
+          _lastFetch = DateTime.now();
 
           // ⚡ Batch write to Hive (only on refresh)
           _localDeviceService.assignAllDevices(devices: devices);
